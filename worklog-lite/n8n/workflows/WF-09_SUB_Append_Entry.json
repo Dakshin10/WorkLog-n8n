@@ -1,0 +1,355 @@
+{
+  "name": "WF-09 SUB Append Entry",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF-09 SUB Append Entry\n**Purpose**: the ONLY place a `Timesheet` row is created (build-prompt D4, G2, G10, G11, G12).\n- Verification gate check on `verified_at` (must be within `REVERIFY_WINDOW_MIN`).\n- Idempotency-checked on Entry ID before writing.\n- Maps columns A-O (including Verified At UTC in Column J).\n\n**Input**: `{ entry, employee, session_id, entry_id, verified_at, prompt_version, supersedes? }`",
+        "height": 320,
+        "width": 420
+      },
+      "id": "sticky_purpose",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [80, 40]
+    },
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [100, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verification Gate: ensure verified_at is present and within REVERIFY_WINDOW_MIN\nconst input = $input.first().json;\nconst verifiedAtStr = input.verified_at;\nconst settings = input.settings || {};\nconst windowMin = Number(settings.REVERIFY_WINDOW_MIN || 15);\n\nif (!verifiedAtStr) {\n  return [{ json: { ok: false, code: 'NOT_VERIFIED' } }];\n}\n\nconst verifiedAt = new Date(verifiedAtStr);\nconst now = new Date();\nconst ageMin = (now.getTime() - verifiedAt.getTime()) / (1000 * 60);\n\nif (isNaN(verifiedAt.getTime()) || ageMin > windowMin) {\n  return [{ json: { ok: false, code: 'NOT_VERIFIED' } }];\n}\n\nreturn [{ json: input }];"
+      },
+      "id": "verification_gate",
+      "name": "Verification Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [280, 460]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $json.ok }}", "rightValue": false, "operator": { "type": "boolean", "operation": "equals" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is_unverified",
+      "name": "Gate Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: false, code: 'NOT_VERIFIED' } }];"
+      },
+      "id": "return_not_verified",
+      "name": "Return Not Verified",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 320]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Timesheet",
+          "mode": "list",
+          "cachedResultName": "Timesheet"
+        },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "Entry ID", "lookupValue": "={{ $json.entry_id }}" }
+          ]
+        },
+        "options": { "returnAllMatches": "returnFirstMatch" }
+      },
+      "id": "idempotency_check",
+      "name": "Idempotency check",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [700, 560],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "worklog_sheets",
+          "name": "WorkLog Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $json['Entry ID'] }}", "rightValue": "", "operator": { "type": "string", "operation": "notEquals" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "already_saved",
+      "name": "Already saved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [920, 560]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true, already_saved: true, row: $input.first().json } }];"
+      },
+      "id": "return_already_saved",
+      "name": "Return Already Saved",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 440]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map the validated entry to Timesheet columns A-O exactly.\nconst input = $('When Executed by Another Workflow').first().json;\nconst entry = input.entry || {};\nconst employee = input.employee || {};\n\nfunction guard(value) {\n  const s = (value === null || value === undefined) ? '' : value.toString();\n  if (/^[=+\\-@]/.test(s)) return \"'\" + s;\n  return s;\n}\n\nconst loggedAt = new Date().toISOString();\n\nconst row = {\n  'Entry ID': guard(input.entry_id),\n  'Employee Code': guard(employee.code),\n  Date: entry.work_date,\n  'Project Name': guard(entry.project),\n  'Activity Type': guard(entry.activity),\n  'Contributed Hours': Number(entry.hours),\n  'Task Description': guard(entry.task_description),\n  'Additional Comments': guard(entry.additional_comments || ''),\n  'Logged At (UTC)': loggedAt,\n  'Verified At (UTC)': input.verified_at || loggedAt,\n  Channel: 'WEB_CHAT',\n  'Session ID': guard(input.session_id),\n  Status: 'LOGGED',\n  Supersedes: guard(input.supersedes || ''),\n  'Prompt Version': guard(input.prompt_version)\n};\n\nreturn [{ json: row }];"
+      },
+      "id": "build_row",
+      "name": "Build row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 660]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Timesheet",
+          "mode": "list",
+          "cachedResultName": "Timesheet"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Entry ID": "={{ $json['Entry ID'] }}",
+            "Employee Code": "={{ $json['Employee Code'] }}",
+            "Date": "={{ $json.Date }}",
+            "Project Name": "={{ $json['Project Name'] }}",
+            "Activity Type": "={{ $json['Activity Type'] }}",
+            "Contributed Hours": "={{ $json['Contributed Hours'] }}",
+            "Task Description": "={{ $json['Task Description'] }}",
+            "Additional Comments": "={{ $json['Additional Comments'] }}",
+            "Logged At (UTC)": "={{ $json['Logged At (UTC)'] }}",
+            "Verified At (UTC)": "={{ $json['Verified At (UTC)'] }}",
+            "Channel": "={{ $json.Channel }}",
+            "Session ID": "={{ $json['Session ID'] }}",
+            "Status": "={{ $json.Status }}",
+            "Supersedes": "={{ $json.Supersedes }}",
+            "Prompt Version": "={{ $json['Prompt Version'] }}"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "append_row",
+      "name": "Append row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1360, 660],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleApi": {
+          "id": "worklog_sheets",
+          "name": "WorkLog Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Timesheet",
+          "mode": "list",
+          "cachedResultName": "Timesheet"
+        },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "Entry ID", "lookupValue": "={{ $('Build row').first().json['Entry ID'] }}" }
+          ]
+        },
+        "options": { "returnAllMatches": "returnFirstMatch" }
+      },
+      "id": "read_back",
+      "name": "Read back",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1580, 660],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "worklog_sheets",
+          "name": "WorkLog Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $json['Entry ID'] }}", "rightValue": "", "operator": { "type": "string", "operation": "notEquals" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "verified",
+      "name": "Verified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1800, 660]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: false, code: 'SAVE_UNVERIFIED' } }];"
+      },
+      "id": "save_unverified",
+      "name": "Save Unverified",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2020, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Day total calculation\nconst input = $('When Executed by Another Workflow').first().json;\nconst entry = input.entry || {};\nconst existing = Array.isArray(input.existing_day_rows) ? input.existing_day_rows : [];\n\nconst priorTotal = existing\n  .filter(r => (r.Status || r.status || 'LOGGED') !== 'SUPERSEDED')\n  .reduce((sum, r) => sum + (Number(r['Contributed Hours'] || r.hours) || 0), 0);\n\nconst dayTotal = Math.round((priorTotal + Number(entry.hours || 0)) * 100) / 100;\nconst row = $json;\n\nreturn [{ json: { ok: true, already_saved: false, row, day_total: dayTotal } }];"
+      },
+      "id": "day_total",
+      "name": "Day total",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2020, 560]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $vars.WF_10_AUDIT_ID || \"REPLACE_WITH_WF-10_ID\" }}",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "session_id": "={{ $('When Executed by Another Workflow').first().json.session_id }}",
+            "employee_code": "={{ $('When Executed by Another Workflow').first().json.employee.code }}",
+            "event": "SAVED",
+            "detail": "={{ { entry_id: $('When Executed by Another Workflow').first().json.entry_id, hours: $('When Executed by Another Workflow').first().json.entry.hours, project: $('When Executed by Another Workflow').first().json.entry.project, activity: $('When Executed by Another Workflow').first().json.entry.activity } }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "call_audit_saved",
+      "name": "WF-10 Audit (SAVED)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [2240, 560],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Day total').first().json }];"
+      },
+      "id": "respond_append",
+      "name": "Respond Append Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2460, 560]
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [ { "node": "Verification Gate", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Verification Gate": {
+      "main": [
+        [ { "node": "Gate Failed?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Gate Failed?": {
+      "main": [
+        [ { "node": "Return Not Verified", "type": "main", "index": 0 } ],
+        [ { "node": "Idempotency check", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Idempotency check": {
+      "main": [
+        [ { "node": "Already saved?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Already saved?": {
+      "main": [
+        [ { "node": "Return Already Saved", "type": "main", "index": 0 } ],
+        [ { "node": "Build row", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Build row": {
+      "main": [
+        [ { "node": "Append row", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Append row": {
+      "main": [
+        [ { "node": "Read back", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Read back": {
+      "main": [
+        [ { "node": "Verified?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Verified?": {
+      "main": [
+        [ { "node": "Day total", "type": "main", "index": 0 } ],
+        [ { "node": "Save Unverified", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Day total": {
+      "main": [
+        [ { "node": "WF-10 Audit (SAVED)", "type": "main", "index": 0 } ]
+      ]
+    },
+    "WF-10 Audit (SAVED)": {
+      "main": [
+        [ { "node": "Respond Append Result", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

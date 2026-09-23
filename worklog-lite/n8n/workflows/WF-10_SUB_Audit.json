@@ -1,0 +1,104 @@
+{
+  "name": "WF-10 SUB Audit",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF-10 SUB Audit\n**Purpose**: append-only audit trail (guardrail G16, tab spec §3 `Audit`).\n- Strips any key named `pin`, `password`, `secret` from detail object before writing.\n- Events: `SESSION_START`, `IDENTITY_OK`, `IDENTITY_REJECTED`, `ASSIGNMENT_SHOWN`, `EXTRACTED`, `VALIDATION_FAILED`, `SUMMARY_SHOWN`, `VERIFY_OK`, `VERIFY_FAILED`, `PIN_LOCKED`, `SAVED`, `CANCELLED`, `EXPIRED`, `AI_ERROR`, `RATE_LIMITED`, `INJECTION_SUSPECTED`, `PIN_SET`.\n- *On Error → Continue* so auditing never fails a caller.",
+        "height": 300,
+        "width": 400
+      },
+      "id": "sticky_purpose",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [80, 40]
+    },
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [120, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json || {};\n\nfunction sanitizeObject(obj) {\n  if (!obj || typeof obj !== 'object') return obj;\n  if (Array.isArray(obj)) return obj.map(sanitizeObject);\n  const clean = {};\n  for (const key of Object.keys(obj)) {\n    if (/pin|password|secret/i.test(key)) {\n      clean[key] = '[REDACTED]';\n    } else {\n      clean[key] = sanitizeObject(obj[key]);\n    }\n  }\n  return clean;\n}\n\nfunction safeStringify(value) {\n  try {\n    if (value === undefined || value === null) return '';\n    if (typeof value === 'string') {\n      if (/pin|password|secret/i.test(value)) return '[REDACTED]';\n      return value;\n    }\n    const clean = sanitizeObject(value);\n    return JSON.stringify(clean);\n  } catch (e) {\n    return '[unserializable detail]';\n  }\n}\n\nconst timestamp = new Date().toISOString();\nconst sessionId = input.session_id || '';\nconst employeeCode = input.employee_code || '';\nconst event = input.event || 'UNKNOWN_EVENT';\nlet detail = safeStringify(input.detail);\nif (detail.length > 500) detail = detail.slice(0, 497) + '...';\n\nreturn [{\n  json: {\n    Timestamp: timestamp,\n    'Session ID': sessionId,\n    'Employee Code': employeeCode,\n    Event: event,\n    Detail: detail\n  }\n}];"
+      },
+      "id": "build_row",
+      "name": "Build Audit Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [340, 380]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Audit",
+          "mode": "list",
+          "cachedResultName": "Audit"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $json.Timestamp }}",
+            "Session ID": "={{ $json['Session ID'] }}",
+            "Employee Code": "={{ $json['Employee Code'] }}",
+            "Event": "={{ $json.Event }}",
+            "Detail": "={{ $json.Detail }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "append_audit_row",
+      "name": "Append Audit Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [560, 380],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleApi": {
+          "id": "worklog_sheets",
+          "name": "WorkLog Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true } }];"
+      },
+      "id": "respond_ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 380]
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [ { "node": "Build Audit Row", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Build Audit Row": {
+      "main": [
+        [ { "node": "Append Audit Row", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Append Audit Row": {
+      "main": [
+        [ { "node": "Respond OK", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

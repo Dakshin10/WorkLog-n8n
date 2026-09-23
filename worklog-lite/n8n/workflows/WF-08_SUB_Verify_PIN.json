@@ -1,0 +1,173 @@
+{
+  "name": "WF-08 SUB Verify PIN",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF-08 SUB Verify PIN\n**Purpose**: Security-sensitive WorkLog PIN verification (guardrail G2, G16).\n- Performs constant-time HMAC-SHA256 comparison against stored `PIN Hash`.\n- Handles attempt counting and 15-minute account lockouts.\n- Execution logs disabled (`saveExecutionProgress: false`). Never echoes PIN.",
+        "height": 260,
+        "width": 380
+      },
+      "id": "sticky_purpose",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [80, 40]
+    },
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [100, 360]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Employees",
+          "mode": "list",
+          "cachedResultName": "Employees"
+        },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "Employee Code", "lookupValue": "={{ $json.employee_code }}" }
+          ]
+        },
+        "options": { "returnAllMatches": "returnFirstMatch" }
+      },
+      "id": "lookup_employee",
+      "name": "Lookup Employee",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [320, 360],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "worklog_sheets",
+          "name": "WorkLog Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst rows = $input.all();\nconst row = rows.length && rows[0].json && rows[0].json['Employee Code'] ? rows[0].json : null;\nconst input = $('When Executed by Another Workflow').first().json;\nconst employeeCode = (input.employee_code || '').toString().trim().toUpperCase();\nconst rawPin = (input.pin || '').toString().trim();\nconst sessionId = input.session_id || '';\nconst settings = input.settings || {};\nconst pinLength = Number(settings.PIN_LENGTH || 6);\nconst maxAttempts = Number(settings.PIN_MAX_ATTEMPTS || 3);\nconst lockoutMin = Number(settings.PIN_LOCKOUT_MIN || 15);\n\nif (!row) {\n  return [{ json: { ok: false, code: 'UNKNOWN_EMPLOYEE_CODE', employee_code: employeeCode, session_id: sessionId } }];\n}\n\nconst storedHash = (row['PIN Hash'] || '').toString().trim();\nconst failedAttempts = Number(row['Failed Attempts'] || 0);\nconst lockedUntilStr = (row['Locked Until'] || '').toString().trim();\n\n// 1. Lock check\nif (lockedUntilStr) {\n  const lockedUntil = new Date(lockedUntilStr);\n  if (!isNaN(lockedUntil.getTime()) && lockedUntil > new Date()) {\n    return [{ json: { ok: false, code: 'PIN_LOCKED', locked_until: lockedUntilStr, employee_code: employeeCode, session_id: sessionId } }];\n  }\n}\n\n// 2. PIN missing check\nif (!storedHash) {\n  return [{ json: { ok: false, code: 'PIN_NOT_SET', employee_code: employeeCode, session_id: sessionId } }];\n}\n\n// 3. Format check\nif (!/^\\d+$/.test(rawPin) || rawPin.length !== pinLength) {\n  return [{ json: { ok: false, code: 'INVALID_PIN_FORMAT', attempts_left: maxAttempts - failedAttempts, employee_code: employeeCode, session_id: sessionId } }];\n}\n\n// 4. Hash and compare\nconst pepper = process.env.APP_PIN_PEPPER || $vars.WORKLOG_PEPPER || 'default_worklog_pepper_secret_hex';\nconst computedHash = crypto.createHmac('sha256', pepper).update(rawPin).digest('hex');\n\nlet isMatch = false;\ntry {\n  const b1 = Buffer.from(computedHash, 'hex');\n  const b2 = Buffer.from(storedHash, 'hex');\n  if (b1.length === b2.length) {\n    isMatch = crypto.timingSafeEqual(b1, b2);\n  }\n} catch (e) {\n  isMatch = false;\n}\n\nconst nowIso = new Date().toISOString();\n\nif (isMatch) {\n  return [{\n    json: {\n      ok: true,\n      action: 'CLEAR_FAILED',\n      employee_code: employeeCode,\n      verified_at: nowIso,\n      session_id: sessionId\n    }\n  }];\n} else {\n  const newFailed = failedAttempts + 1;\n  if (newFailed >= maxAttempts) {\n    const lockedUntilDate = new Date(Date.now() + lockoutMin * 60 * 1000).toISOString();\n    return [{\n      json: {\n        ok: false,\n        action: 'LOCK_ACCOUNT',\n        code: 'PIN_LOCKED',\n        employee_code: employeeCode,\n        failed_attempts: newFailed,\n        locked_until: lockedUntilDate,\n        session_id: sessionId\n      }\n    }];\n  } else {\n    return [{\n      json: {\n        ok: false,\n        action: 'INCREMENT_FAILED',\n        code: 'PIN_MISMATCH',\n        employee_code: employeeCode,\n        failed_attempts: newFailed,\n        attempts_left: maxAttempts - newFailed,\n        session_id: sessionId\n      }\n    }];\n  }\n}"
+      },
+      "id": "verify_and_compare",
+      "name": "Verify and Compare PIN",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 360]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Employees",
+          "mode": "list",
+          "cachedResultName": "Employees"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Employee Code": "={{ $json.employee_code }}",
+            "Failed Attempts": "={{ $json.ok ? 0 : $json.failed_attempts }}",
+            "Locked Until": "={{ $json.ok ? '' : ($json.code === 'PIN_LOCKED' ? $json.locked_until : '') }}"
+          },
+          "matchingColumns": ["Employee Code"]
+        },
+        "options": {}
+      },
+      "id": "update_employee_status",
+      "name": "Update Employee Security Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [760, 360],
+      "credentials": {
+        "googleApi": {
+          "id": "worklog_sheets",
+          "name": "WorkLog Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $vars.WF_10_AUDIT_ID || \"REPLACE_WITH_WF-10_ID\" }}",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "session_id": "={{ $('Verify and Compare PIN').first().json.session_id }}",
+            "employee_code": "={{ $('Verify and Compare PIN').first().json.employee_code }}",
+            "event": "={{ $('Verify and Compare PIN').first().json.ok ? 'VERIFY_OK' : ($('Verify and Compare PIN').first().json.code === 'PIN_LOCKED' ? 'PIN_LOCKED' : 'VERIFY_FAILED') }}",
+            "detail": "={{ { code: $('Verify and Compare PIN').first().json.code, attempts_left: $('Verify and Compare PIN').first().json.attempts_left } }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "call_audit",
+      "name": "WF-10 Audit",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [980, 360],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $('Verify and Compare PIN').first().json;\nconst res = { ok: v.ok };\nif (v.code) res.code = v.code;\nif (v.attempts_left != null) res.attempts_left = v.attempts_left;\nif (v.locked_until) res.locked_until = v.locked_until;\nif (v.verified_at) res.verified_at = v.verified_at;\nreturn [{ json: res }];"
+      },
+      "id": "respond_result",
+      "name": "Respond Verification Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 360]
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [ { "node": "Lookup Employee", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Lookup Employee": {
+      "main": [
+        [ { "node": "Verify and Compare PIN", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Verify and Compare PIN": {
+      "main": [
+        [ { "node": "Update Employee Security Status", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Update Employee Security Status": {
+      "main": [
+        [ { "node": "WF-10 Audit", "type": "main", "index": 0 } ]
+      ]
+    },
+    "WF-10 Audit": {
+      "main": [
+        [ { "node": "Respond Verification Result", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false
+  }
+}

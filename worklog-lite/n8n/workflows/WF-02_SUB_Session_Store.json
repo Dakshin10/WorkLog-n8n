@@ -1,0 +1,194 @@
+{
+  "name": "WF-02 SUB Session Store",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF-02 SUB Session Store\n**Purpose**: read/write the `Sessions` tab, the single source of conversation state.\n- Handles `Verified At` timestamp and `verification_fresh` calculation (`REVERIFY_WINDOW_MIN`).\n- Input: `{ op: \"get\"|\"upsert\"|\"clear\", session_id, state?, stage?, verified_at? }`",
+        "height": 300,
+        "width": 380
+      },
+      "id": "sticky_purpose",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [80, 40]
+    },
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [100, 460]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "leftValue": "={{ $json.op }}", "rightValue": "get", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "renameOutput": true, "outputKey": "get" },
+            { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "leftValue": "={{ $json.op }}", "rightValue": "upsert", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "renameOutput": true, "outputKey": "upsert" },
+            { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [ { "leftValue": "={{ $json.op }}", "rightValue": "clear", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "renameOutput": true, "outputKey": "clear" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch_op",
+      "name": "Switch op",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [320, 460]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sessions",
+          "mode": "list",
+          "cachedResultName": "Sessions"
+        },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "Session ID", "lookupValue": "={{ $json.session_id }}" }
+          ]
+        },
+        "options": { "returnAllMatches": "returnFirstMatch" }
+      },
+      "id": "get_session_row",
+      "name": "Get Session Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [560, 260],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "worklog_sheets",
+          "name": "WorkLog Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse session row and calculate verification_fresh\nconst rows = $input.all();\nconst row = rows.length && rows[0].json && rows[0].json['Session ID'] ? rows[0].json : null;\nconst input = $('When Executed by Another Workflow').first().json;\nconst settings = input.settings || {};\nconst reverifyWindowMin = Number(settings.REVERIFY_WINDOW_MIN || 15);\n\nif (!row) {\n  return [{ json: { found: false, expired: false, corrupt: false, state: {}, stage: 'IDLE', verified_at: null, verification_fresh: false } }];\n}\n\nlet state = {};\nlet corrupt = false;\ntry {\n  state = row.State ? JSON.parse(row.State) : {};\n} catch (e) {\n  state = {};\n  corrupt = true;\n}\n\nconst expiresAt = row['Expires At'] ? new Date(row['Expires At']) : null;\nconst now = new Date();\nconst expired = !!(expiresAt && !isNaN(expiresAt.getTime()) && expiresAt.getTime() < now.getTime());\n\nconst verifiedAtStr = row['Verified At'] || null;\nlet verificationFresh = false;\nif (verifiedAtStr) {\n  const vDate = new Date(verifiedAtStr);\n  if (!isNaN(vDate.getTime())) {\n    const ageMin = (now.getTime() - vDate.getTime()) / (1000 * 60);\n    if (ageMin <= reverifyWindowMin) {\n      verificationFresh = true;\n    }\n  }\n}\n\nreturn [{\n  json: {\n    found: true,\n    expired,\n    corrupt,\n    state: expired ? {} : state,\n    stage: expired ? 'IDLE' : (row.Stage || 'IDLE'),\n    employee_code: row['Employee Code'] || '',\n    verified_at: expired ? null : verifiedAtStr,\n    verification_fresh: expired ? false : verificationFresh\n  }\n}];"
+      },
+      "id": "parse_session",
+      "name": "Parse Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 260]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst timeoutMin = Number(input.session_timeout_min) > 0 ? Number(input.session_timeout_min) : 30;\nconst now = new Date();\nconst expiresAt = new Date(now.getTime() + timeoutMin * 60 * 1000);\n\nlet stateStr;\ntry {\n  stateStr = JSON.stringify(input.state || {});\n} catch (e) {\n  stateStr = '{}';\n}\n\nreturn [{\n  json: {\n    'Session ID': input.session_id,\n    'Employee Code': (input.state && input.state.employee && input.state.employee.code) || input.employee_code || '',\n    State: stateStr,\n    Stage: input.stage || 'IDLE',\n    'Verified At': input.verified_at !== undefined ? input.verified_at : (input.state && input.state.verified_at ? input.state.verified_at : ''),\n    'Updated At': now.toISOString(),\n    'Expires At': expiresAt.toISOString()\n  }\n}];"
+      },
+      "id": "build_upsert_row",
+      "name": "Build Upsert Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 460]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sessions",
+          "mode": "list",
+          "cachedResultName": "Sessions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Session ID"],
+          "value": {
+            "Session ID": "={{ $json['Session ID'] }}",
+            "Employee Code": "={{ $json['Employee Code'] }}",
+            "State": "={{ $json.State }}",
+            "Stage": "={{ $json.Stage }}",
+            "Verified At": "={{ $json['Verified At'] }}",
+            "Updated At": "={{ $json['Updated At'] }}",
+            "Expires At": "={{ $json['Expires At'] }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "upsert_session_row",
+      "name": "Upsert Session Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [780, 460],
+      "credentials": {
+        "googleApi": {
+          "id": "worklog_sheets",
+          "name": "WorkLog Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\ninput.state = {};\ninput.stage = 'IDLE';\ninput.verified_at = '';\nreturn [{ json: input }];"
+      },
+      "id": "clear_state",
+      "name": "Clear State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 640]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = $input.first().json;\nreturn [{\n  json: {\n    ok: true,\n    state: JSON.parse(out.State || '{}'),\n    stage: out.Stage,\n    verified_at: out['Verified At'],\n    expires_at: out['Expires At']\n  }\n}];"
+      },
+      "id": "respond_upsert",
+      "name": "Respond Upsert Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 460]
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [ { "node": "Switch op", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Switch op": {
+      "main": [
+        [ { "node": "Get Session Row", "type": "main", "index": 0 } ],
+        [ { "node": "Build Upsert Row", "type": "main", "index": 0 } ],
+        [ { "node": "Clear State", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Get Session Row": {
+      "main": [
+        [ { "node": "Parse Session", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Build Upsert Row": {
+      "main": [
+        [ { "node": "Upsert Session Row", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Clear State": {
+      "main": [
+        [ { "node": "Build Upsert Row", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Upsert Session Row": {
+      "main": [
+        [ { "node": "Respond Upsert Result", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

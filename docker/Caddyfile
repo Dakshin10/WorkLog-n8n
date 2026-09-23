@@ -1,0 +1,36 @@
+{$DOMAIN_NAME:localhost} {
+	# Handle CORS Preflight for Webhook API
+	@options {
+		method OPTIONS
+		path /webhook/api/*
+	}
+	handle @options {
+		header Access-Control-Allow-Origin "{$APP_WEB_BASE_URL:http://localhost:3000}"
+		header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+		header Access-Control-Allow-Headers "Authorization, Content-Type, X-Dev-User"
+		header Access-Control-Max-Age "86400"
+		respond 204
+	}
+
+	# API Webhooks with CORS
+	handle /webhook/api/* {
+		header Access-Control-Allow-Origin "{$APP_WEB_BASE_URL:http://localhost:3000}"
+		header Access-Control-Allow-Headers "Authorization, Content-Type, X-Dev-User"
+		reverse_proxy n8n-main:5678
+	}
+
+	# Bot Messages Webhooks
+	handle /webhook/bot/* {
+		reverse_proxy n8n-main:5678
+	}
+
+	# Block test webhooks in production
+	handle /webhook-test/* {
+		respond "Not Found" 404
+	}
+
+	# Default n8n Editor Access
+	handle {
+		reverse_proxy n8n-main:5678
+	}
+}

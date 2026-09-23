@@ -1,0 +1,4 @@
+Employee Code,Name,Email,Status,Projects,Timezone,Max Hours Per Day,PIN Hash,PIN Set At,Failed Attempts,Locked Until
+EVS-114,Renu,renu@example.com,ACTIVE,Minori Labs — AI Practice,Asia/Kolkata,,,2026-09-20,0,
+EVS-115,Arjun,arjun@example.com,ACTIVE,"Minori Labs — AI Practice,Evonsys",Asia/Kolkata,,,2026-09-20,0,
+EVS-116,Meera,meera@example.com,INACTIVE,Evonsys,Asia/Kolkata,,,2026-09-20,0,

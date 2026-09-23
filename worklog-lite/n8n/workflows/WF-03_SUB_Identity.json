@@ -1,0 +1,144 @@
+{
+  "name": "WF-03 SUB Identity",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF-03 SUB Identity\n**Purpose**: Authentication gate for reads (guardrail G1). Resolves Employee Code against `Employees` tab, checks lockout & active status, and intersects assigned projects with `Catalog`.\n\n**Input**: `{ employee_code, session_id }`",
+        "height": 280,
+        "width": 380
+      },
+      "id": "sticky_purpose",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [80, 40]
+    },
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [100, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalise the employee code: trim, uppercase, strip internal spaces.\nconst input = $input.first().json;\nconst raw = (input.employee_code || '').toString();\nconst normalised = raw.trim().toUpperCase().replace(/\\s+/g, '');\nreturn [{ json: { employee_code: normalised, session_id: input.session_id || '' } }];"
+      },
+      "id": "normalise_code",
+      "name": "Normalise Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, 400]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Employees",
+          "mode": "list",
+          "cachedResultName": "Employees"
+        },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "Employee Code", "lookupValue": "={{ $json.employee_code }}" }
+          ]
+        },
+        "options": { "returnAllMatches": "returnFirstMatch" }
+      },
+      "id": "lookup_employee",
+      "name": "Lookup Employee",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [540, 400],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "worklog_sheets",
+          "name": "WorkLog Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resolve found/not-found/inactive/locked and build public employee object.\nconst rows = $input.all();\nconst row = rows.length && rows[0].json && rows[0].json['Employee Code'] ? rows[0].json : null;\nconst code = $('Normalise Code').first().json.employee_code;\nconst callerInput = $('When Executed by Another Workflow').first().json;\nconst defaults = callerInput.settings_defaults || {};\nconst catalog = callerInput.catalog || [];\nconst defaultTimezone = defaults.DEFAULT_TIMEZONE || 'Asia/Kolkata';\n\nif (!row) {\n  return [{ json: { ok: false, code: 'UNKNOWN_EMPLOYEE_CODE', employee_code: code } }];\n}\n\nif ((row.Status || '').toString().trim().toUpperCase() !== 'ACTIVE') {\n  return [{ json: { ok: false, code: 'EMPLOYEE_INACTIVE', employee_code: code } }];\n}\n\n// Check Locked Until timestamp\nconst lockedUntilStr = (row['Locked Until'] || '').toString().trim();\nif (lockedUntilStr) {\n  const lockedUntil = new Date(lockedUntilStr);\n  if (!isNaN(lockedUntil.getTime()) && lockedUntil > new Date()) {\n    return [{ json: { ok: false, code: 'EMPLOYEE_LOCKED', until: lockedUntilStr, employee_code: code } }];\n  }\n}\n\nconst projectsRaw = (row.Projects || '').toString().trim();\nconst assignedProjectNames = projectsRaw ? projectsRaw.split(',').map(p => p.trim()).filter(Boolean) : [];\n\n// Build assignment: intersect employee projects with catalog\nlet allowedProjects = [];\nif (assignedProjectNames.length > 0) {\n  allowedProjects = catalog.filter(c => assignedProjectNames.includes(c.project));\n} else {\n  allowedProjects = catalog;\n}\n\nif (allowedProjects.length === 0) {\n  return [{ json: { ok: true, unassigned: true, employee_code: code } }];\n}\n\nconst timezone = (row.Timezone || '').toString().trim() || defaultTimezone;\nconst maxHoursCell = (row['Max Hours Per Day'] || '').toString().trim();\nconst maxHoursPerDay = maxHoursCell !== '' && !isNaN(Number(maxHoursCell)) ? Number(maxHoursCell) : null;\n\nreturn [{\n  json: {\n    ok: true,\n    employee: {\n      code: (row['Employee Code'] || code).toString().trim().toUpperCase(),\n      name: (row.Name || '').toString().trim(),\n      timezone,\n      projects: assignedProjectNames,\n      max_hours_per_day: maxHoursPerDay\n    },\n    assignment: {\n      projects: allowedProjects\n    }\n  }\n}];"
+      },
+      "id": "resolve_identity",
+      "name": "Resolve Identity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 400]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $vars.WF_10_AUDIT_ID || \"REPLACE_WITH_WF-10_ID\" }}",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "session_id": "={{ $('Normalise Code').first().json.session_id }}",
+            "employee_code": "={{ $json.ok ? $json.employee.code : $json.employee_code }}",
+            "event": "={{ $json.ok ? 'IDENTITY_OK' : 'IDENTITY_REJECTED' }}",
+            "detail": "={{ $json.ok ? { code: $json.employee.code } : { code: $json.code, employee_code: $json.employee_code } }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "call_audit",
+      "name": "WF-10 Audit",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [980, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const identity = $('Resolve Identity').first().json;\nreturn [{ json: identity }];"
+      },
+      "id": "respond_identity",
+      "name": "Respond Identity Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 400]
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [ { "node": "Normalise Code", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Normalise Code": {
+      "main": [
+        [ { "node": "Lookup Employee", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Lookup Employee": {
+      "main": [
+        [ { "node": "Resolve Identity", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Resolve Identity": {
+      "main": [
+        [ { "node": "WF-10 Audit", "type": "main", "index": 0 } ]
+      ]
+    },
+    "WF-10 Audit": {
+      "main": [
+        [ { "node": "Respond Identity Result", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
