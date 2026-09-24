@@ -129,7 +129,8 @@
     },
     {
       "parameters": {
-        "sendTo": "={{ $vars.WORKLOG_OPS_ALERT_EMAIL || \"REPLACE_WITH_OPS_EMAIL\" }}",
+        "fromEmail": "={{ $vars.WORKLOG_OPS_FROM_EMAIL || \"REPLACE_WITH_OPS_FROM_EMAIL\" }}",
+        "toEmail": "={{ $vars.WORKLOG_OPS_ALERT_EMAIL || \"REPLACE_WITH_OPS_EMAIL\" }}",
         "subject": "=WorkLog Lite error: {{ $json.Workflow }}",
         "message": "=Node: {{ $json.Node }}\\nMessage: {{ $json.Message }}\\nExecution: {{ $json['Execution URL'] }}\\n\\n(Throttled to at most one alert per workflow per 10 minutes.)",
         "options": {}

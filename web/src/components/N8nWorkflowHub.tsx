@@ -1,20 +1,22 @@
 import React from 'react';
 import { Workflow, ExternalLink } from 'lucide-react';
 
+const COMBINED_WORKFLOW_ID = 'WorkLog-Lite-Combined';
+
 const WORKFLOWS = [
-  { id: 'WF-01_Chat_Orchestrator', name: 'Chat Orchestrator', type: 'Chat Trigger', desc: 'Main chat state machine for WorkLog AI Lite (Length, Session, Gemini, Rules, PIN, Audit)', status: 'ACTIVE' },
-  { id: 'WF-02_SUB_Session_Store', name: 'SUB Session Store', type: 'Execute Workflow', desc: 'Read/write state & verification window in Sessions tab', status: 'ACTIVE' },
-  { id: 'WF-03_SUB_Identity', name: 'SUB Identity', type: 'Execute Workflow', desc: 'Employee Code → lookup identity & project assignment', status: 'ACTIVE' },
-  { id: 'WF-04_SUB_Reference_Data', name: 'SUB Reference Data', type: 'Execute Workflow', desc: 'Settings + Catalog with 5-minute memory cache', status: 'ACTIVE' },
-  { id: 'WF-05_SUB_Scrub_Unscrub', name: 'SUB Scrub / Unscrub', type: 'Execute Workflow', desc: 'Mask & unmask PII terms & standalone PIN digits before Gemini', status: 'ACTIVE' },
-  { id: 'WF-06_SUB_Extract_Gemini', name: 'SUB Extract Gemini', type: 'Execute Workflow', desc: 'Gemini extraction with Basic LLM Chain & Structured Output Parser', status: 'ACTIVE' },
-  { id: 'WF-07_SUB_Validate_Entry', name: 'SUB Validate Entry', type: 'Execute Workflow', desc: 'Deterministic rule engine checking rules R1–R15, W1–W2', status: 'ACTIVE' },
-  { id: 'WF-08_SUB_Verify_PIN', name: 'SUB Verify PIN', type: 'Execute Workflow', desc: 'HMAC-SHA256 verification (no execution logs saved)', status: 'ACTIVE' },
-  { id: 'WF-09_SUB_Append_Entry', name: 'SUB Append Entry', type: 'Execute Workflow', desc: 'The only Timesheet append node, idempotent & gated', status: 'ACTIVE' },
-  { id: 'WF-10_SUB_Audit', name: 'SUB Audit', type: 'Execute Workflow', desc: 'Append-only audit trail in Google Sheets', status: 'ACTIVE' },
-  { id: 'WF-11_Global_Error_Handler', name: 'Global Error Handler', type: 'Error Trigger', desc: 'Error Workflow handling failures across all sub-workflows', status: 'ACTIVE' },
-  { id: 'WF-12_Maintenance', name: 'Maintenance', type: 'Schedule Trigger', desc: 'Session expiry, cleanup, lockout resets scheduled every 15m', status: 'ACTIVE' },
-  { id: 'WF-13_PIN_Enrolment', name: 'PIN Enrolment', type: 'Form Trigger', desc: 'HR PIN setting & resetting form', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'Chat Orchestrator', type: 'Chat Trigger', desc: 'Main chat state machine for WorkLog AI Lite (Length, Session, Gemini, Rules, PIN, Audit)', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'SUB Session Store', type: 'Inlined branch', desc: 'Read/write state & verification window in Sessions tab', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'SUB Identity', type: 'Inlined branch', desc: 'Employee Code → lookup identity & project assignment', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'SUB Reference Data', type: 'Inlined branch', desc: 'Settings + Catalog with 5-minute memory cache', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'SUB Scrub / Unscrub', type: 'Inlined branch', desc: 'Mask & unmask PII terms & standalone PIN digits before Gemini', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'SUB Extract Gemini', type: 'Inlined branch', desc: 'Gemini extraction with Basic LLM Chain & Structured Output Parser', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'SUB Validate Entry', type: 'Inlined branch', desc: 'Deterministic rule engine checking rules R1–R15, W1–W2', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'SUB Verify PIN', type: 'Inlined branch', desc: 'HMAC-SHA256 verification (no execution logs saved)', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'SUB Append Entry', type: 'Inlined branch', desc: 'The only Timesheet append node, idempotent & gated', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'SUB Audit', type: 'Inlined branch', desc: 'Append-only audit trail in Google Sheets', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'Global Error Handler', type: 'Error Trigger', desc: 'Error Workflow handling failures across all sub-workflows', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'Maintenance', type: 'Schedule Trigger', desc: 'Session expiry, cleanup, lockout resets scheduled every 15m', status: 'ACTIVE' },
+  { id: COMBINED_WORKFLOW_ID, name: 'PIN Enrolment', type: 'Form Trigger', desc: 'HR PIN setting & resetting form', status: 'ACTIVE' },
 ];
 
 export const N8nWorkflowHub: React.FC = () => {
@@ -28,11 +30,11 @@ export const N8nWorkflowHub: React.FC = () => {
               <Workflow className="w-5 h-5 text-white" /> n8n Orchestration Engine
             </h2>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-black text-zinc-300 border border-zinc-800">
-              13 Workflows Deployed
+              1 Combined Workflow · 13 Stages
             </span>
           </div>
           <p className="text-xs text-zinc-400 mt-1">
-            Running on <code className="text-white font-mono">http://localhost:5678</code>. All sub-workflows connected via ID dependency graph.
+            Running on <code className="text-white font-mono">http://localhost:5678</code>. All 13 stages are inlined into a single importable workflow (<code className="text-white font-mono">{COMBINED_WORKFLOW_ID}</code>).
           </p>
         </div>
 
@@ -46,14 +48,14 @@ export const N8nWorkflowHub: React.FC = () => {
         </a>
       </div>
 
-      {/* Grid of 13 workflows */}
+      {/* Grid of 13 stages, all inlined into one workflow */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {WORKFLOWS.map((wf) => (
-          <div key={wf.id} className="mono-card-interactive p-5 rounded-lg border border-zinc-800 flex flex-col justify-between">
+        {WORKFLOWS.map((wf, idx) => (
+          <div key={`${wf.id}-${idx}`} className="mono-card-interactive p-5 rounded-lg border border-zinc-800 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between gap-2 mb-2">
                 <span className="text-[10px] font-mono font-bold text-white px-2 py-0.5 rounded bg-black border border-zinc-800">
-                  {wf.id.split('_')[0]}
+                  STAGE {String(idx + 1).padStart(2, '0')}
                 </span>
                 <span className="text-[10px] font-mono text-zinc-400 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-white"></span>

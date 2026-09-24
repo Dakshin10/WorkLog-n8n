@@ -379,7 +379,8 @@
     },
     {
       "parameters": {
-        "sendTo": "={{ $vars.WORKLOG_OPS_ALERT_EMAIL || \"REPLACE_WITH_OPS_EMAIL\" }}",
+        "fromEmail": "={{ $vars.WORKLOG_OPS_FROM_EMAIL || \"REPLACE_WITH_OPS_FROM_EMAIL\" }}",
+        "toEmail": "={{ $vars.WORKLOG_OPS_ALERT_EMAIL || \"REPLACE_WITH_OPS_EMAIL\" }}",
         "subject": "WorkLog Lite: Timesheet tab approaching Sheets scale limit",
         "message": "=The Timesheet tab now has {{ $input.all().length }} rows. Per the build-prompt doc \u00a712, plan the migration to the Postgres track before this passes ~40,000 rows.",
         "options": {}
@@ -514,7 +515,8 @@
     },
     {
       "parameters": {
-        "sendTo": "={{ $vars.WORKLOG_HR_DIGEST_EMAIL || \"REPLACE_WITH_HR_EMAIL\" }}",
+        "fromEmail": "={{ $vars.WORKLOG_OPS_FROM_EMAIL || \"REPLACE_WITH_OPS_FROM_EMAIL\" }}",
+        "toEmail": "={{ $vars.WORKLOG_HR_DIGEST_EMAIL || \"REPLACE_WITH_HR_EMAIL\" }}",
         "subject": "=WorkLog Lite daily digest \u2014 {{ $now.format('yyyy-MM-dd') }}",
         "message": "={{ $json.digest_text }}",
         "options": {}
