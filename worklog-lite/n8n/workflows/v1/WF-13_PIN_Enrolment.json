@@ -11,26 +11,45 @@
       "name": "Purpose",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [80, 40]
+      "position": [
+        80,
+        40
+      ]
     },
     {
       "parameters": {
-        "formTitle": "WorkLog AI — PIN Enrolment",
+        "formTitle": "WorkLog AI \u2014 PIN Enrolment",
         "formDescription": "HR utility to set or reset an employee's 6-digit WorkLog PIN.",
         "fields": {
           "values": [
-            { "fieldLabel": "Employee Code", "requiredField": true },
-            { "fieldLabel": "New PIN (6 digits)", "fieldType": "password", "requiredField": true },
-            { "fieldLabel": "Confirm PIN", "fieldType": "password", "requiredField": true }
+            {
+              "fieldLabel": "Employee Code",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "New PIN (6 digits)",
+              "fieldType": "password",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Confirm PIN",
+              "fieldType": "password",
+              "requiredField": true
+            }
           ]
         },
-        "options": {}
+        "options": {},
+        "path": "pin-enrolment"
       },
       "id": "form_trigger",
       "name": "Form Trigger",
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.1,
-      "position": [100, 360]
+      "position": [
+        100,
+        360
+      ],
+      "webhookId": "pin-enrolment"
     },
     {
       "parameters": {
@@ -40,14 +59,28 @@
       "name": "Validate & Hash PIN",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [320, 360]
+      "position": [
+        320,
+        360
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
-            { "leftValue": "={{ $json.ok }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+            {
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
           ],
           "combinator": "and"
         },
@@ -57,14 +90,17 @@
       "name": "Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [540, 360]
+      "position": [
+        540,
+        360
+      ]
     },
     {
       "parameters": {
         "operation": "search",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -75,16 +111,25 @@
         },
         "filtersUI": {
           "values": [
-            { "lookupColumn": "Employee Code", "lookupValue": "={{ $json.employee_code }}" }
+            {
+              "lookupColumn": "Employee Code",
+              "lookupValue": "={{ $json.employee_code }}"
+            }
           ]
         },
-        "options": { "returnAllMatches": "returnFirstMatch" }
+        "options": {
+          "returnAllMatches": "returnFirstMatch"
+        },
+        "authentication": "serviceAccount"
       },
       "id": "lookup_employee",
       "name": "Lookup Employee",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [760, 280],
+      "position": [
+        760,
+        280
+      ],
       "alwaysOutputData": true,
       "credentials": {
         "googleApi": {
@@ -101,14 +146,17 @@
       "name": "Check Employee Active",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [980, 280]
+      "position": [
+        980,
+        280
+      ]
     },
     {
       "parameters": {
         "operation": "update",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -126,15 +174,21 @@
             "Failed Attempts": "0",
             "Locked Until": ""
           },
-          "matchingColumns": ["Employee Code"]
+          "matchingColumns": [
+            "Employee Code"
+          ]
         },
-        "options": {}
+        "options": {},
+        "authentication": "serviceAccount"
       },
       "id": "update_employee_pin",
       "name": "Update Employee PIN Hash",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1200, 280],
+      "position": [
+        1200,
+        280
+      ],
       "credentials": {
         "googleApi": {
           "id": "worklog_sheets",
@@ -146,7 +200,7 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "={{ $vars.WF_10_AUDIT_ID || \"REPLACE_WITH_WF-10_ID\" }}",
+          "value": "WF-10_SUB_Audit",
           "mode": "id"
         },
         "workflowInputs": {
@@ -164,7 +218,10 @@
       "name": "WF-10 Audit (PIN_SET)",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1420, 280],
+      "position": [
+        1420,
+        280
+      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -177,7 +234,10 @@
       "name": "Respond Success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1640, 280]
+      "position": [
+        1640,
+        280
+      ]
     },
     {
       "parameters": {
@@ -189,44 +249,95 @@
       "name": "Respond Error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [760, 480]
+      "position": [
+        760,
+        480
+      ]
     }
   ],
   "connections": {
     "Form Trigger": {
       "main": [
-        [ { "node": "Validate & Hash PIN", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Validate & Hash PIN",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Validate & Hash PIN": {
       "main": [
-        [ { "node": "Valid?", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Valid?": {
       "main": [
-        [ { "node": "Lookup Employee", "type": "main", "index": 0 } ],
-        [ { "node": "Respond Error", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Lookup Employee",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Lookup Employee": {
       "main": [
-        [ { "node": "Check Employee Active", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Check Employee Active",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Check Employee Active": {
       "main": [
-        [ { "node": "Update Employee PIN Hash", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Update Employee PIN Hash",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Update Employee PIN Hash": {
       "main": [
-        [ { "node": "WF-10 Audit (PIN_SET)", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "WF-10 Audit (PIN_SET)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "WF-10 Audit (PIN_SET)": {
       "main": [
-        [ { "node": "Respond Success", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -234,5 +345,7 @@
     "executionOrder": "v1",
     "saveExecutionProgress": false,
     "saveManualExecutions": false
-  }
+  },
+  "id": "WF-13_PIN_Enrolment",
+  "active": true
 }

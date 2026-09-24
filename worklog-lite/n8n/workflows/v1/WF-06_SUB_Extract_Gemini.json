@@ -11,7 +11,10 @@
       "name": "Purpose",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [80, 40]
+      "position": [
+        80,
+        40
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +22,10 @@
       "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [100, 460]
+      "position": [
+        100,
+        460
+      ]
     },
     {
       "parameters": {
@@ -27,8 +33,18 @@
         "duplicateItem": false,
         "assignments": {
           "assignments": [
-            { "id": "a1", "name": "model_input", "type": "object", "value": "={{ { today: $json.today, weekday: $json.weekday, timezone: $json.timezone, allowed_projects: $json.allowed_projects, pending_entry: $json.pending_entry || {}, expected_field: $json.expected_field || null, hour_aliases: $json.hour_aliases || { \"half day\": 4, \"full day\": 8 }, message: $json.masked_text } }}" },
-            { "id": "a2", "name": "masked_text", "type": "string", "value": "={{ $json.masked_text }}" }
+            {
+              "id": "a1",
+              "name": "model_input",
+              "type": "object",
+              "value": "={{ { today: $json.today, weekday: $json.weekday, timezone: $json.timezone, allowed_projects: $json.allowed_projects, pending_entry: $json.pending_entry || {}, expected_field: $json.expected_field || null, hour_aliases: $json.hour_aliases || { \"half day\": 4, \"full day\": 8 }, message: $json.masked_text } }}"
+            },
+            {
+              "id": "a2",
+              "name": "masked_text",
+              "type": "string",
+              "value": "={{ $json.masked_text }}"
+            }
           ]
         },
         "options": {}
@@ -37,7 +53,10 @@
       "name": "Build model input",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [320, 460]
+      "position": [
+        320,
+        460
+      ]
     },
     {
       "parameters": {
@@ -57,7 +76,10 @@
       "name": "Extract work log",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.6,
-      "position": [560, 460],
+      "position": [
+        560,
+        460
+      ],
       "onError": "continueErrorOutput"
     },
     {
@@ -72,7 +94,10 @@
       "name": "Gemini Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [500, 680],
+      "position": [
+        500,
+        680
+      ],
       "credentials": {
         "googlePalmApi": {
           "id": "worklog_gemini",
@@ -89,7 +114,10 @@
       "name": "Structured Output Parser",
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
-      "position": [700, 680]
+      "position": [
+        700,
+        680
+      ]
     },
     {
       "parameters": {
@@ -99,7 +127,10 @@
       "name": "Auto-fixing Output Parser",
       "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
       "typeVersion": 1,
-      "position": [860, 620]
+      "position": [
+        860,
+        620
+      ]
     },
     {
       "parameters": {
@@ -113,7 +144,10 @@
       "name": "Gemini Chat Model (Autofix)",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [900, 780],
+      "position": [
+        900,
+        780
+      ],
       "credentials": {
         "googlePalmApi": {
           "id": "worklog_gemini",
@@ -129,7 +163,10 @@
       "name": "Post-process",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [780, 460]
+      "position": [
+        780,
+        460
+      ]
     },
     {
       "parameters": {
@@ -137,8 +174,18 @@
         "duplicateItem": false,
         "assignments": {
           "assignments": [
-            { "id": "e1", "name": "ai_error", "type": "boolean", "value": true },
-            { "id": "e2", "name": "reason", "type": "string", "value": "={{ $json.error?.message || $json.message || 'Gemini call failed or timed out' }}" }
+            {
+              "id": "e1",
+              "name": "ai_error",
+              "type": "boolean",
+              "value": true
+            },
+            {
+              "id": "e2",
+              "name": "reason",
+              "type": "string",
+              "value": "={{ $json.error?.message || $json.message || 'Gemini call failed or timed out' }}"
+            }
           ]
         },
         "options": {}
@@ -147,44 +194,95 @@
       "name": "AI Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [560, 260]
+      "position": [
+        560,
+        260
+      ]
     }
   ],
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
-        [ { "node": "Build model input", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Build model input",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build model input": {
       "main": [
-        [ { "node": "Extract work log", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Extract work log",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Extract work log": {
       "main": [
-        [ { "node": "Post-process", "type": "main", "index": 0 } ],
-        [ { "node": "AI Error", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Post-process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Gemini Chat Model": {
       "ai_languageModel": [
-        [ { "node": "Extract work log", "type": "ai_languageModel", "index": 0 } ]
+        [
+          {
+            "node": "Extract work log",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
       ]
     },
     "Structured Output Parser": {
       "ai_outputParser": [
-        [ { "node": "Auto-fixing Output Parser", "type": "ai_outputParser", "index": 0 } ]
+        [
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
       ]
     },
     "Auto-fixing Output Parser": {
       "ai_outputParser": [
-        [ { "node": "Extract work log", "type": "ai_outputParser", "index": 0 } ]
+        [
+          {
+            "node": "Extract work log",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
       ]
     },
     "Gemini Chat Model (Autofix)": {
       "ai_languageModel": [
-        [ { "node": "Auto-fixing Output Parser", "type": "ai_languageModel", "index": 0 } ]
+        [
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -193,5 +291,7 @@
     "saveManualExecutions": true,
     "saveExecutionProgress": false,
     "saveDataSuccessExecution": "none"
-  }
+  },
+  "id": "WF-06_SUB_Extract_Gemini",
+  "active": true
 }

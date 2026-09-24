@@ -11,7 +11,10 @@
       "name": "Purpose",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [80, 40]
+      "position": [
+        80,
+        40
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +22,10 @@
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
-      "position": [100, 400]
+      "position": [
+        100,
+        400
+      ]
     },
     {
       "parameters": {
@@ -29,14 +35,17 @@
       "name": "Build Error Row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [320, 400]
+      "position": [
+        320,
+        400
+      ]
     },
     {
       "parameters": {
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -55,13 +64,17 @@
             "Execution URL": "={{ $json['Execution URL'] }}"
           }
         },
-        "options": {}
+        "options": {},
+        "authentication": "serviceAccount"
       },
       "id": "append_ops_error",
       "name": "Append Ops Error",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [540, 400],
+      "position": [
+        540,
+        400
+      ],
       "onError": "continueRegularOutput",
       "credentials": {
         "googleApi": {
@@ -78,14 +91,28 @@
       "name": "Throttle Check",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [760, 400]
+      "position": [
+        760,
+        400
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
-            { "leftValue": "={{ $json.should_alert }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+            {
+              "leftValue": "={{ $json.should_alert }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
           ],
           "combinator": "and"
         },
@@ -95,7 +122,10 @@
       "name": "Should alert?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [980, 400]
+      "position": [
+        980,
+        400
+      ]
     },
     {
       "parameters": {
@@ -108,7 +138,10 @@
       "name": "Send Alert Email",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [1200, 320],
+      "position": [
+        1200,
+        320
+      ],
       "onError": "continueRegularOutput",
       "credentials": {
         "smtp": {
@@ -121,32 +154,64 @@
   "connections": {
     "Error Trigger": {
       "main": [
-        [ { "node": "Build Error Row", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Build Error Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Error Row": {
       "main": [
-        [ { "node": "Append Ops Error", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Append Ops Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Append Ops Error": {
       "main": [
-        [ { "node": "Throttle Check", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Throttle Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Throttle Check": {
       "main": [
-        [ { "node": "Should alert?", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Should alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Should alert?": {
       "main": [
-        [ { "node": "Send Alert Email", "type": "main", "index": 0 } ],
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "id": "WF-11_Global_Error_Handler",
+  "active": true
 }

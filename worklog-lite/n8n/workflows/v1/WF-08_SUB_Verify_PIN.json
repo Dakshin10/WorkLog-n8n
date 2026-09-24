@@ -11,7 +11,10 @@
       "name": "Purpose",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [80, 40]
+      "position": [
+        80,
+        40
+      ]
     },
     {
       "parameters": {},
@@ -19,14 +22,17 @@
       "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [100, 360]
+      "position": [
+        100,
+        360
+      ]
     },
     {
       "parameters": {
         "operation": "search",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -37,16 +43,25 @@
         },
         "filtersUI": {
           "values": [
-            { "lookupColumn": "Employee Code", "lookupValue": "={{ $json.employee_code }}" }
+            {
+              "lookupColumn": "Employee Code",
+              "lookupValue": "={{ $json.employee_code }}"
+            }
           ]
         },
-        "options": { "returnAllMatches": "returnFirstMatch" }
+        "options": {
+          "returnAllMatches": "returnFirstMatch"
+        },
+        "authentication": "serviceAccount"
       },
       "id": "lookup_employee",
       "name": "Lookup Employee",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [320, 360],
+      "position": [
+        320,
+        360
+      ],
       "alwaysOutputData": true,
       "credentials": {
         "googleApi": {
@@ -63,14 +78,17 @@
       "name": "Verify and Compare PIN",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [540, 360]
+      "position": [
+        540,
+        360
+      ]
     },
     {
       "parameters": {
         "operation": "update",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -86,15 +104,21 @@
             "Failed Attempts": "={{ $json.ok ? 0 : $json.failed_attempts }}",
             "Locked Until": "={{ $json.ok ? '' : ($json.code === 'PIN_LOCKED' ? $json.locked_until : '') }}"
           },
-          "matchingColumns": ["Employee Code"]
+          "matchingColumns": [
+            "Employee Code"
+          ]
         },
-        "options": {}
+        "options": {},
+        "authentication": "serviceAccount"
       },
       "id": "update_employee_status",
       "name": "Update Employee Security Status",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [760, 360],
+      "position": [
+        760,
+        360
+      ],
       "credentials": {
         "googleApi": {
           "id": "worklog_sheets",
@@ -106,7 +130,7 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "={{ $vars.WF_10_AUDIT_ID || \"REPLACE_WITH_WF-10_ID\" }}",
+          "value": "WF-10_SUB_Audit",
           "mode": "id"
         },
         "workflowInputs": {
@@ -124,7 +148,10 @@
       "name": "WF-10 Audit",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [980, 360],
+      "position": [
+        980,
+        360
+      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -135,33 +162,66 @@
       "name": "Respond Verification Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 360]
+      "position": [
+        1200,
+        360
+      ]
     }
   ],
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
-        [ { "node": "Lookup Employee", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Lookup Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Lookup Employee": {
       "main": [
-        [ { "node": "Verify and Compare PIN", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Verify and Compare PIN",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Verify and Compare PIN": {
       "main": [
-        [ { "node": "Update Employee Security Status", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Update Employee Security Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Update Employee Security Status": {
       "main": [
-        [ { "node": "WF-10 Audit", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "WF-10 Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "WF-10 Audit": {
       "main": [
-        [ { "node": "Respond Verification Result", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Respond Verification Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -169,5 +229,7 @@
     "executionOrder": "v1",
     "saveExecutionProgress": false,
     "saveManualExecutions": false
-  }
+  },
+  "id": "WF-08_SUB_Verify_PIN",
+  "active": true
 }

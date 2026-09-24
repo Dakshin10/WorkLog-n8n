@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## WF-10 SUB Audit\n**Purpose**: append-only audit trail (guardrail G16, tab spec §3 `Audit`).\n- Strips any key named `pin`, `password`, `secret` from detail object before writing.\n- Events: `SESSION_START`, `IDENTITY_OK`, `IDENTITY_REJECTED`, `ASSIGNMENT_SHOWN`, `EXTRACTED`, `VALIDATION_FAILED`, `SUMMARY_SHOWN`, `VERIFY_OK`, `VERIFY_FAILED`, `PIN_LOCKED`, `SAVED`, `CANCELLED`, `EXPIRED`, `AI_ERROR`, `RATE_LIMITED`, `INJECTION_SUSPECTED`, `PIN_SET`.\n- *On Error → Continue* so auditing never fails a caller.",
+        "content": "## WF-10 SUB Audit\n**Purpose**: append-only audit trail (guardrail G16, tab spec \u00a73 `Audit`).\n- Strips any key named `pin`, `password`, `secret` from detail object before writing.\n- Events: `SESSION_START`, `IDENTITY_OK`, `IDENTITY_REJECTED`, `ASSIGNMENT_SHOWN`, `EXTRACTED`, `VALIDATION_FAILED`, `SUMMARY_SHOWN`, `VERIFY_OK`, `VERIFY_FAILED`, `PIN_LOCKED`, `SAVED`, `CANCELLED`, `EXPIRED`, `AI_ERROR`, `RATE_LIMITED`, `INJECTION_SUSPECTED`, `PIN_SET`.\n- *On Error \u2192 Continue* so auditing never fails a caller.",
         "height": 300,
         "width": 400
       },
@@ -11,7 +11,10 @@
       "name": "Purpose",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [80, 40]
+      "position": [
+        80,
+        40
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +22,10 @@
       "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [120, 380]
+      "position": [
+        120,
+        380
+      ]
     },
     {
       "parameters": {
@@ -29,14 +35,17 @@
       "name": "Build Audit Row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [340, 380]
+      "position": [
+        340,
+        380
+      ]
     },
     {
       "parameters": {
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -55,13 +64,17 @@
             "Detail": "={{ $json.Detail }}"
           }
         },
-        "options": {}
+        "options": {},
+        "authentication": "serviceAccount"
       },
       "id": "append_audit_row",
       "name": "Append Audit Row",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [560, 380],
+      "position": [
+        560,
+        380
+      ],
       "onError": "continueRegularOutput",
       "credentials": {
         "googleApi": {
@@ -78,27 +91,50 @@
       "name": "Respond OK",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [780, 380]
+      "position": [
+        780,
+        380
+      ]
     }
   ],
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
-        [ { "node": "Build Audit Row", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Build Audit Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Audit Row": {
       "main": [
-        [ { "node": "Append Audit Row", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Append Audit Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Append Audit Row": {
       "main": [
-        [ { "node": "Respond OK", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "id": "WF-10_SUB_Audit",
+  "active": true
 }

@@ -1,99 +1,122 @@
 import React, { useState, useEffect } from 'react';
+import { Header } from './components/Header';
+import { Sidebar, TabType } from './components/Sidebar';
 import { ChatThread } from './components/ChatThread';
-import { api, UserProfile } from './lib/api';
-import { Clock, Calendar, CheckSquare, Bell, User } from 'lucide-react';
+import { TimesheetDashboard } from './components/TimesheetDashboard';
+import { AuditLogView } from './components/AuditLogView';
+import { GoogleSheetsConnectView } from './components/GoogleSheetsConnectView';
+import { NotificationsModal } from './components/NotificationsModal';
+import { api, DEMO_USERS } from './lib/api';
+import { UserProfile, TimesheetEntry, AuditEvent, NotificationItem } from './types';
 
 export const App: React.FC = () => {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [activeTab, setActiveTab] = useState<'chat' | 'logs' | 'notifications'>('chat');
+  const [currentUser, setCurrentUser] = useState<UserProfile>(DEMO_USERS[0]);
+  const [activeTab, setActiveTab] = useState<TabType>('chat');
+
+  // Application Data States
+  const [timesheets, setTimesheets] = useState<TimesheetEntry[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditEvent[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [showNotifications, setShowNotifications] = useState<boolean>(false);
+
+  const loadData = async () => {
+    try {
+      const [tsData, audData, notifData] = await Promise.all([
+        api.getTimesheets(),
+        api.getAuditLogs(),
+        api.getNotifications()
+      ]);
+      setTimesheets(tsData);
+      setAuditLogs(audData);
+      setNotifications(notifData);
+    } catch (err) {
+      console.error('Failed loading data:', err);
+    }
+  };
 
   useEffect(() => {
-    api.getMe()
-      .then(setUser)
-      .catch((err) => console.error('Error fetching user profile:', err));
+    loadData();
   }, []);
 
+  const handleResetSession = () => {
+    api.resetSession();
+    setActiveTab('chat');
+  };
+
+  const handleAddManualEntry = (entry: TimesheetEntry) => {
+    setTimesheets((prev) => [entry, ...prev]);
+    setAuditLogs((prev) => [
+      {
+        id: `aud_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        employeeCode: entry.employeeCode,
+        event: 'CONFIRMED',
+        details: `Manual entry ${entry.entryId} logged ${entry.hours}h to ${entry.project}`,
+        sessionId: 'MANUAL_GRID',
+        status: 'SUCCESS'
+      },
+      ...prev
+    ]);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Top Navbar */}
-      <header className="bg-slate-900 border-b border-slate-800 px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-600 to-emerald-500 flex items-center justify-center font-black text-white text-lg shadow-lg">
-            W
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white tracking-tight">WorkLog AI</h1>
-            <p className="text-xs text-slate-400">n8n Orchestrated Work Logging</p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col font-sans antialiased selection:bg-white selection:text-black">
+      {/* Top Header Bar */}
+      <Header
+        currentUser={currentUser}
+        onUserSelect={setCurrentUser}
+        unreadCount={notifications.filter((n) => !n.read).length}
+        onOpenNotifications={() => setShowNotifications(true)}
+      />
 
-        {/* User profile widget */}
-        {user && (
-          <div className="flex items-center gap-4 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700">
-            <div className="w-8 h-8 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-xs">
-              <User className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-white">{user.name}</p>
-              <p className="text-[10px] text-slate-400">{user.role} • {user.department}</p>
-            </div>
-          </div>
-        )}
-      </header>
-
-      {/* Main Body */}
-      <div className="flex-1 flex px-8 py-6 gap-8 max-w-7xl mx-auto w-full">
+      {/* Main Layout Area */}
+      <div className="flex-1 flex flex-col md:flex-row px-4 md:px-8 py-6 gap-6 max-w-[1600px] mx-auto w-full">
         {/* Navigation Sidebar */}
-        <aside className="w-64 flex flex-col gap-2">
-          <button
-            onClick={() => setActiveTab('chat')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all cursor-pointer ${
-              activeTab === 'chat'
-                ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/30'
-                : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-            }`}
-          >
-            <Clock className="w-5 h-5" /> AI Work Log Chat
-          </button>
-          <button
-            onClick={() => setActiveTab('logs')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all cursor-pointer ${
-              activeTab === 'logs'
-                ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/30'
-                : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-            }`}
-          >
-            <Calendar className="w-5 h-5" /> My Timesheets
-          </button>
-          <button
-            onClick={() => setActiveTab('notifications')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all cursor-pointer ${
-              activeTab === 'notifications'
-                ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/30'
-                : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-            }`}
-          >
-            <Bell className="w-5 h-5" /> Notifications
-          </button>
-        </aside>
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          userRole={currentUser.role}
+          logCount={timesheets.length}
+          onResetSession={handleResetSession}
+        />
 
-        {/* Content Area */}
-        <main className="flex-1">
-          {activeTab === 'chat' && <ChatThread />}
-          {activeTab === 'logs' && (
-            <div className="bg-slate-900 p-8 rounded-xl border border-slate-800">
-              <h2 className="text-xl font-bold mb-4">My Weekly Timesheets</h2>
-              <p className="text-slate-400 text-sm">Mon–Sun timesheet grid with version diff history.</p>
-            </div>
+        {/* Content View Container */}
+        <main className="flex-1 min-w-0">
+          {activeTab === 'chat' && (
+            <ChatThread
+              currentUser={currentUser}
+              onEntrySaved={loadData}
+              onResetSession={handleResetSession}
+            />
           )}
-          {activeTab === 'notifications' && (
-            <div className="bg-slate-900 p-8 rounded-xl border border-slate-800">
-              <h2 className="text-xl font-bold mb-4">Notifications Center</h2>
-              <p className="text-slate-400 text-sm">Approvals and edit request decision alerts.</p>
-            </div>
+
+          {activeTab === 'timesheets' && (
+            <TimesheetDashboard
+              entries={timesheets}
+              currentUser={currentUser}
+              onAddEntry={handleAddManualEntry}
+            />
+          )}
+
+          {activeTab === 'sheets' && (
+            <GoogleSheetsConnectView />
+          )}
+
+          {activeTab === 'audit' && (
+            <AuditLogView logs={auditLogs} />
           )}
         </main>
       </div>
+
+      {/* Notifications Slide-over Drawer */}
+      <NotificationsModal
+        notifications={notifications}
+        isOpen={showNotifications}
+        onClose={() => setShowNotifications(false)}
+      />
     </div>
   );
 };
+
+export default App;
+

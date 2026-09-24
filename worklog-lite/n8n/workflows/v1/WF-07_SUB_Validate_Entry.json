@@ -11,7 +11,10 @@
       "name": "Purpose",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [80, 40]
+      "position": [
+        80,
+        40
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +22,10 @@
       "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [100, 400]
+      "position": [
+        100,
+        400
+      ]
     },
     {
       "parameters": {
@@ -29,17 +35,28 @@
       "name": "Validate Entry",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [340, 400]
+      "position": [
+        340,
+        400
+      ]
     }
   ],
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
-        [ { "node": "Validate Entry", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Validate Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "id": "WF-07_SUB_Validate_Entry",
+  "active": true
 }

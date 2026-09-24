@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## WF-04 SUB Reference Data\n**Purpose**: read + cache `Settings` and `Catalog` (build-prompt D6/D7, §3).\n- Cached for 5 minutes in workflow static data.\n- Coerces numbers, booleans, list keys, JSON keys, and PIN settings.\n- Groups `Catalog` by project, sorted by `Sort` column.",
+        "content": "## WF-04 SUB Reference Data\n**Purpose**: read + cache `Settings` and `Catalog` (build-prompt D6/D7, \u00a73).\n- Cached for 5 minutes in workflow static data.\n- Coerces numbers, booleans, list keys, JSON keys, and PIN settings.\n- Groups `Catalog` by project, sorted by `Sort` column.",
         "height": 300,
         "width": 380
       },
@@ -11,7 +11,10 @@
       "name": "Purpose",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [80, 40]
+      "position": [
+        80,
+        40
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +22,10 @@
       "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [100, 420]
+      "position": [
+        100,
+        420
+      ]
     },
     {
       "parameters": {
@@ -29,14 +35,28 @@
       "name": "Check Cache",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [320, 420]
+      "position": [
+        320,
+        420
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
-            { "leftValue": "={{ $json.cacheValid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+            {
+              "leftValue": "={{ $json.cacheValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
           ],
           "combinator": "and"
         },
@@ -46,7 +66,10 @@
       "name": "Cache valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [540, 420]
+      "position": [
+        540,
+        420
+      ]
     },
     {
       "parameters": {
@@ -56,14 +79,17 @@
       "name": "Return Cached",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [760, 300]
+      "position": [
+        760,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "read",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -72,13 +98,17 @@
           "mode": "list",
           "cachedResultName": "Settings"
         },
-        "options": {}
+        "options": {},
+        "authentication": "serviceAccount"
       },
       "id": "get_settings_rows",
       "name": "Get Settings Rows",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [760, 460],
+      "position": [
+        760,
+        460
+      ],
       "credentials": {
         "googleApi": {
           "id": "worklog_sheets",
@@ -94,14 +124,17 @@
       "name": "Parse Settings",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [980, 460]
+      "position": [
+        980,
+        460
+      ]
     },
     {
       "parameters": {
         "operation": "read",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -110,13 +143,17 @@
           "mode": "list",
           "cachedResultName": "Catalog"
         },
-        "options": {}
+        "options": {},
+        "authentication": "serviceAccount"
       },
       "id": "get_catalog_rows",
       "name": "Get Catalog Rows",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1200, 460],
+      "position": [
+        1200,
+        460
+      ],
       "credentials": {
         "googleApi": {
           "id": "worklog_sheets",
@@ -132,43 +169,90 @@
       "name": "Build Catalog & Cache",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1420, 460]
+      "position": [
+        1420,
+        460
+      ]
     }
   ],
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
-        [ { "node": "Check Cache", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Check Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Check Cache": {
       "main": [
-        [ { "node": "Cache valid?", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Cache valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Cache valid?": {
       "main": [
-        [ { "node": "Return Cached", "type": "main", "index": 0 } ],
-        [ { "node": "Get Settings Rows", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Return Cached",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Settings Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Get Settings Rows": {
       "main": [
-        [ { "node": "Parse Settings", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Parse Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parse Settings": {
       "main": [
-        [ { "node": "Get Catalog Rows", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Get Catalog Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Get Catalog Rows": {
       "main": [
-        [ { "node": "Build Catalog & Cache", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Build Catalog & Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "id": "WF-04_SUB_Reference_Data",
+  "active": true
 }

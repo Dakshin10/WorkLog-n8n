@@ -11,7 +11,10 @@
       "name": "Purpose",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [80, 40]
+      "position": [
+        80,
+        40
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +22,10 @@
       "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [100, 400]
+      "position": [
+        100,
+        400
+      ]
     },
     {
       "parameters": {
@@ -29,14 +35,17 @@
       "name": "Normalise Code",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [320, 400]
+      "position": [
+        320,
+        400
+      ]
     },
     {
       "parameters": {
         "operation": "search",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -47,16 +56,25 @@
         },
         "filtersUI": {
           "values": [
-            { "lookupColumn": "Employee Code", "lookupValue": "={{ $json.employee_code }}" }
+            {
+              "lookupColumn": "Employee Code",
+              "lookupValue": "={{ $json.employee_code }}"
+            }
           ]
         },
-        "options": { "returnAllMatches": "returnFirstMatch" }
+        "options": {
+          "returnAllMatches": "returnFirstMatch"
+        },
+        "authentication": "serviceAccount"
       },
       "id": "lookup_employee",
       "name": "Lookup Employee",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [540, 400],
+      "position": [
+        540,
+        400
+      ],
       "alwaysOutputData": true,
       "credentials": {
         "googleApi": {
@@ -73,13 +91,16 @@
       "name": "Resolve Identity",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [760, 400]
+      "position": [
+        760,
+        400
+      ]
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "={{ $vars.WF_10_AUDIT_ID || \"REPLACE_WITH_WF-10_ID\" }}",
+          "value": "WF-10_SUB_Audit",
           "mode": "id"
         },
         "workflowInputs": {
@@ -97,7 +118,10 @@
       "name": "WF-10 Audit",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [980, 400],
+      "position": [
+        980,
+        400
+      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -108,37 +132,72 @@
       "name": "Respond Identity Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 400]
+      "position": [
+        1200,
+        400
+      ]
     }
   ],
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
-        [ { "node": "Normalise Code", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Normalise Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Normalise Code": {
       "main": [
-        [ { "node": "Lookup Employee", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Lookup Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Lookup Employee": {
       "main": [
-        [ { "node": "Resolve Identity", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Resolve Identity",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Resolve Identity": {
       "main": [
-        [ { "node": "WF-10 Audit", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "WF-10 Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "WF-10 Audit": {
       "main": [
-        [ { "node": "Respond Identity Result", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Respond Identity Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "id": "WF-03_SUB_Identity",
+  "active": true
 }

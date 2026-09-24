@@ -11,7 +11,10 @@
       "name": "Purpose",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [80, 40]
+      "position": [
+        80,
+        40
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +22,10 @@
       "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [100, 460]
+      "position": [
+        100,
+        460
+      ]
     },
     {
       "parameters": {
@@ -29,14 +35,28 @@
       "name": "Verification Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [280, 460]
+      "position": [
+        280,
+        460
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
-            { "leftValue": "={{ $json.ok }}", "rightValue": false, "operator": { "type": "boolean", "operation": "equals" } }
+            {
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
           ],
           "combinator": "and"
         },
@@ -46,7 +66,10 @@
       "name": "Gate Failed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [480, 460]
+      "position": [
+        480,
+        460
+      ]
     },
     {
       "parameters": {
@@ -56,14 +79,17 @@
       "name": "Return Not Verified",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 320]
+      "position": [
+        700,
+        320
+      ]
     },
     {
       "parameters": {
         "operation": "search",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -74,16 +100,25 @@
         },
         "filtersUI": {
           "values": [
-            { "lookupColumn": "Entry ID", "lookupValue": "={{ $json.entry_id }}" }
+            {
+              "lookupColumn": "Entry ID",
+              "lookupValue": "={{ $json.entry_id }}"
+            }
           ]
         },
-        "options": { "returnAllMatches": "returnFirstMatch" }
+        "options": {
+          "returnAllMatches": "returnFirstMatch"
+        },
+        "authentication": "serviceAccount"
       },
       "id": "idempotency_check",
       "name": "Idempotency check",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [700, 560],
+      "position": [
+        700,
+        560
+      ],
       "alwaysOutputData": true,
       "credentials": {
         "googleApi": {
@@ -95,9 +130,20 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
-            { "leftValue": "={{ $json['Entry ID'] }}", "rightValue": "", "operator": { "type": "string", "operation": "notEquals" } }
+            {
+              "leftValue": "={{ $json['Entry ID'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
           ],
           "combinator": "and"
         },
@@ -107,7 +153,10 @@
       "name": "Already saved?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [920, 560]
+      "position": [
+        920,
+        560
+      ]
     },
     {
       "parameters": {
@@ -117,7 +166,10 @@
       "name": "Return Already Saved",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1140, 440]
+      "position": [
+        1140,
+        440
+      ]
     },
     {
       "parameters": {
@@ -127,14 +179,17 @@
       "name": "Build row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1140, 660]
+      "position": [
+        1140,
+        660
+      ]
     },
     {
       "parameters": {
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -165,13 +220,17 @@
         },
         "options": {
           "cellFormat": "USER_ENTERED"
-        }
+        },
+        "authentication": "serviceAccount"
       },
       "id": "append_row",
       "name": "Append row",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1360, 660],
+      "position": [
+        1360,
+        660
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 1000,
@@ -187,7 +246,7 @@
         "operation": "search",
         "documentId": {
           "__rl": true,
-          "value": "={{ $vars.WORKLOG_SHEET_ID || \"REPLACE_WITH_SPREADSHEET_ID\" }}",
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -198,16 +257,25 @@
         },
         "filtersUI": {
           "values": [
-            { "lookupColumn": "Entry ID", "lookupValue": "={{ $('Build row').first().json['Entry ID'] }}" }
+            {
+              "lookupColumn": "Entry ID",
+              "lookupValue": "={{ $('Build row').first().json['Entry ID'] }}"
+            }
           ]
         },
-        "options": { "returnAllMatches": "returnFirstMatch" }
+        "options": {
+          "returnAllMatches": "returnFirstMatch"
+        },
+        "authentication": "serviceAccount"
       },
       "id": "read_back",
       "name": "Read back",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1580, 660],
+      "position": [
+        1580,
+        660
+      ],
       "alwaysOutputData": true,
       "credentials": {
         "googleApi": {
@@ -219,9 +287,20 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
-            { "leftValue": "={{ $json['Entry ID'] }}", "rightValue": "", "operator": { "type": "string", "operation": "notEquals" } }
+            {
+              "leftValue": "={{ $json['Entry ID'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
           ],
           "combinator": "and"
         },
@@ -231,7 +310,10 @@
       "name": "Verified?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1800, 660]
+      "position": [
+        1800,
+        660
+      ]
     },
     {
       "parameters": {
@@ -241,7 +323,10 @@
       "name": "Save Unverified",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2020, 800]
+      "position": [
+        2020,
+        800
+      ]
     },
     {
       "parameters": {
@@ -251,13 +336,16 @@
       "name": "Day total",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2020, 560]
+      "position": [
+        2020,
+        560
+      ]
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "={{ $vars.WF_10_AUDIT_ID || \"REPLACE_WITH_WF-10_ID\" }}",
+          "value": "WF-10_SUB_Audit",
           "mode": "id"
         },
         "workflowInputs": {
@@ -275,7 +363,10 @@
       "name": "WF-10 Audit (SAVED)",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [2240, 560],
+      "position": [
+        2240,
+        560
+      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -286,70 +377,159 @@
       "name": "Respond Append Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2460, 560]
+      "position": [
+        2460,
+        560
+      ]
     }
   ],
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
-        [ { "node": "Verification Gate", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Verification Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Verification Gate": {
       "main": [
-        [ { "node": "Gate Failed?", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Gate Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Gate Failed?": {
       "main": [
-        [ { "node": "Return Not Verified", "type": "main", "index": 0 } ],
-        [ { "node": "Idempotency check", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Return Not Verified",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Idempotency check",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Idempotency check": {
       "main": [
-        [ { "node": "Already saved?", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Already saved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Already saved?": {
       "main": [
-        [ { "node": "Return Already Saved", "type": "main", "index": 0 } ],
-        [ { "node": "Build row", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Return Already Saved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build row",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build row": {
       "main": [
-        [ { "node": "Append row", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Append row",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Append row": {
       "main": [
-        [ { "node": "Read back", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Read back",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Read back": {
       "main": [
-        [ { "node": "Verified?", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Verified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Verified?": {
       "main": [
-        [ { "node": "Day total", "type": "main", "index": 0 } ],
-        [ { "node": "Save Unverified", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Day total",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save Unverified",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Day total": {
       "main": [
-        [ { "node": "WF-10 Audit (SAVED)", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "WF-10 Audit (SAVED)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "WF-10 Audit (SAVED)": {
       "main": [
-        [ { "node": "Respond Append Result", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Respond Append Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "id": "WF-09_SUB_Append_Entry",
+  "active": true
 }
