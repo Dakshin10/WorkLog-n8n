@@ -14,6 +14,8 @@ Use the credentials below to log into the web conversational chat assistant (`ht
 | **`EMP-1002`** | **Alex Mercer** | `alex.mercer@minori.io` | `MANAGER` | AI Solutions Lab | **`123456`** |
 | **`EMP-1003`** | **Elena Rostova** | `elena.rostova@minori.io` | `HR_ADMIN` | Human Resources & Ops | **`990011`** |
 
+> Each employee's PIN is matched exactly — a random 6-digit number will be rejected. Use the PIN listed for that employee's code.
+
 ---
 
 ## 🚀 System Architecture & Quick Start
@@ -47,3 +49,8 @@ npm run dev
 cd web
 npm run build
 ```
+
+
+
+
+$env:NODE_OPTIONS="--dns-result-order=ipv4first"; npx n8n

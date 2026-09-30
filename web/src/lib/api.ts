@@ -1,7 +1,54 @@
-import { UserProfile, EngineResponse, TimesheetEntry, AuditEvent, NotificationItem, StageName } from '../types';
+import { UserProfile, EngineResponse, EngineStatus, TimesheetEntry, AuditEvent, NotificationItem, StageName } from '../types';
 
 const N8N_BASE_URL = import.meta.env.VITE_N8N_URL || 'http://localhost:5678';
+const TIMESHEET_WEBHOOK_URL = import.meta.env.VITE_TIMESHEET_WEBHOOK_URL || `${N8N_BASE_URL}/webhook/timesheet-chat`;
+const ENTRIES_WEBHOOK_URL = import.meta.env.VITE_TIMESHEET_ENTRIES_URL || `${N8N_BASE_URL}/webhook/timesheet-entries`;
+
+// Monday-to-Sunday bounds (local date, YYYY-MM-DD) of the week containing `now`.
+export function currentWeekRange(now: Date = new Date()): { start: string; end: string } {
+  const day = (now.getDay() + 6) % 7; // Monday = 0
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { start: iso(monday), end: iso(sunday) };
+}
+// Offline demo engine (fake entries, never touches Google Sheets). Off unless explicitly enabled.
+const USE_MOCK_ENGINE = import.meta.env.VITE_USE_MOCK_ENGINE === 'true';
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5678/webhook/api/v1';
+
+export const DEFAULT_SHEET_ID = '1sv08dlnTzV6tV6ECd60Od81zkDuemBocjibmOUghhqk';
+
+export function extractSheetId(input: string): string {
+  if (!input) return '';
+  const trimmed = input.trim();
+  if (trimmed.includes('/spreadsheets/d/')) {
+    const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) return match[1];
+  }
+  return trimmed;
+}
+
+export function getStoredSheetRawInput(): string {
+  return localStorage.getItem('worklog_sheet_url_id') || '';
+}
+
+export function getStoredSheetId(): string {
+  const stored = localStorage.getItem('worklog_sheet_url_id');
+  if (!stored) return DEFAULT_SHEET_ID;
+  const extracted = extractSheetId(stored);
+  return extracted || DEFAULT_SHEET_ID;
+}
+
+export function getStoredSheetUrl(): string {
+  const id = getStoredSheetId();
+  return `https://docs.google.com/spreadsheets/d/${id}/edit?usp=sharing`;
+}
+
+export function setStoredSheetUrlOrId(input: string): string {
+  const cleanId = extractSheetId(input);
+  localStorage.setItem('worklog_sheet_url_id', input.trim());
+  return cleanId || DEFAULT_SHEET_ID;
+}
 
 // Seed demo users
 export const DEMO_USERS: UserProfile[] = [
@@ -15,6 +62,17 @@ export const DEMO_USERS: UserProfile[] = [
     timezone: 'Asia/Kolkata',
     hasPin: true,
     projects: [
+      {
+        id: 'prj_00',
+        code: 'PRJ-EVONSYS',
+        name: 'Evonsys',
+        activities: [
+          'UX',
+          'Backend',
+          'Front End',
+          'Client Meeting'
+        ]
+      },
       {
         id: 'prj_01',
         code: 'PRJ-CLIENT-PORTAL',
@@ -53,6 +111,17 @@ export const DEMO_USERS: UserProfile[] = [
     hasPin: true,
     projects: [
       {
+        id: 'prj_00',
+        code: 'PRJ-EVONSYS',
+        name: 'Evonsys',
+        activities: [
+          'UX',
+          'Backend',
+          'Front End',
+          'Client Meeting'
+        ]
+      },
+      {
         id: 'prj_02',
         code: 'PRJ-INTERNAL-AGENTS',
         name: 'Internal AI Agents Track',
@@ -73,40 +142,64 @@ export const DEMO_USERS: UserProfile[] = [
     role: 'HR_ADMIN',
     department: 'Human Resources & Operations',
     timezone: 'Asia/Kolkata',
-    hasPin: false,
+    hasPin: true,
     projects: []
   }
 ];
 
-// Seed timesheet logs
+// Seed timesheet logs matching standard spreadsheet schema
 export const INITIAL_TIMESHEETS: TimesheetEntry[] = [
   {
-    entryId: 'WL-20260923-A8F12C',
-    employeeCode: 'EMP-1001',
-    employeeName: 'Sarah Connor',
-    workDate: '2026-09-23',
-    project: 'Client Portal Revamp',
-    activity: 'Frontend UI Development',
-    hours: 6.5,
-    taskDescription: 'Designed glassmorphic dashboard layout with live chat thread and interactive timesheet grid.',
-    additionalComments: 'All component tests passing cleanly.',
-    status: 'LOGGED',
-    createdAt: '2026-09-23T17:30:00Z',
-    verifiedAt: '2026-09-23T17:30:05Z'
+    entryId: '',
+    employeeCode: '',
+    employeeName: '',
+    workDate: '',
+    project: 'Evonsys',
+    activity: 'UX',
+    hours: 0,
+    taskDescription: '',
+    additionalComments: '',
+    status: 'DRAFT',
+    createdAt: '2026-09-24T10:00:00Z'
   },
   {
-    entryId: 'WL-20260922-99B4D1',
-    employeeCode: 'EMP-1001',
-    employeeName: 'Sarah Connor',
-    workDate: '2026-09-22',
-    project: 'Client Portal Revamp',
-    activity: 'API Integration',
-    hours: 7.0,
-    taskDescription: 'Connected n8n state machine webhook endpoints with React Query layer.',
-    additionalComments: 'Implemented offline fallback state.',
-    status: 'APPROVED',
-    createdAt: '2026-09-22T18:00:00Z',
-    verifiedAt: '2026-09-22T18:00:04Z'
+    entryId: '',
+    employeeCode: '',
+    employeeName: '',
+    workDate: '',
+    project: 'Evonsys',
+    activity: 'Backend',
+    hours: 0,
+    taskDescription: '',
+    additionalComments: '',
+    status: 'DRAFT',
+    createdAt: '2026-09-24T10:00:00Z'
+  },
+  {
+    entryId: '',
+    employeeCode: '',
+    employeeName: '',
+    workDate: '',
+    project: 'Evonsys',
+    activity: 'Front End',
+    hours: 0,
+    taskDescription: '',
+    additionalComments: '',
+    status: 'DRAFT',
+    createdAt: '2026-09-24T10:00:00Z'
+  },
+  {
+    entryId: '',
+    employeeCode: '',
+    employeeName: '',
+    workDate: '',
+    project: 'Evonsys',
+    activity: 'Client Meeting',
+    hours: 0,
+    taskDescription: '',
+    additionalComments: '',
+    status: 'DRAFT',
+    createdAt: '2026-09-24T10:00:00Z'
   }
 ];
 
@@ -147,17 +240,37 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
 // Session state variables for simulation mode
 let currentSessionStage: StageName = 'AWAIT_CODE';
 let currentPendingEntry: Partial<TimesheetEntry> = {};
+let currentPendingEntries: Partial<TimesheetEntry>[] = [];
 let authenticatedUser: UserProfile | null = null;
 
+// Stable per-tab session id, sent to the live n8n webhook so it can key
+// conversation state (AWAIT_CODE -> AWAIT_PIN -> COLLECT -> SUMMARY -> SAVED)
+// per browser session, the same way n8n's own Chat Trigger would via sessionId.
+const SESSION_KEY = 'worklog_browser_session_id';
+let browserSessionId: string = (() => {
+  let existing = sessionStorage.getItem(SESSION_KEY);
+  if (!existing) {
+    existing = `web_${crypto.randomUUID()}`;
+    sessionStorage.setItem(SESSION_KEY, existing);
+  }
+  return existing;
+})();
+
 export const api = {
-  // Reset session stage for New Session
+  // Reset session stage for New Session. A fresh session id means n8n starts a new
+  // conversation: new chat memory and the employee must verify again.
   resetSession: () => {
     currentSessionStage = 'AWAIT_CODE';
     currentPendingEntry = {};
+    currentPendingEntries = [];
     authenticatedUser = null;
+    browserSessionId = `web_${crypto.randomUUID()}`;
+    sessionStorage.setItem(SESSION_KEY, browserSessionId);
   },
 
   getCurrentStage: () => currentSessionStage,
+  getAuthenticatedUser: () => authenticatedUser,
+  isAuthenticated: () => authenticatedUser !== null,
 
   // Check n8n engine health
   checkHealth: async (): Promise<{ connected: boolean; url: string; details?: any }> => {
@@ -174,27 +287,129 @@ export const api = {
 
   // Send message to n8n chat orchestrator (WF-01) or intelligent simulation
   sendMessage: async (message: string, clientMessageId: string, userCode: string = 'EMP-1001'): Promise<EngineResponse> => {
-    // Try live n8n webhook endpoint first
+    // Try live n8n timesheet agent first. Contract: { sessionId, sheetId, message, empCode? }
+    // -> { sessionId, reply, status: ok|needs_credentials|rate_limited|error, retryAfter, entry? }
+    let liveFailure = '';
     try {
-      const liveWebhookUrl = 'http://localhost:5678/webhook/worklog-chat';
-      const res = await fetch(liveWebhookUrl, {
+      const res = await fetch(TIMESHEET_WEBHOOK_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-User': userCode },
-        body: JSON.stringify({ chatInput: message, message, client_message_id: clientMessageId, userCode }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: browserSessionId,
+          sheetId: getStoredSheetId(),
+          message,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
         const replyText = data.output || data.reply || data.text || JSON.stringify(data);
+        const status: EngineStatus | undefined = data.status;
+
+        // Deduce stage reliably from server response or output text
+        let stage: StageName = data.stage;
+        if (!stage) {
+          if (data.entry) {
+            stage = 'SAVED';
+          } else if (status === 'rate_limited') {
+            stage = 'LOCKED';
+          } else if (/enter your password|enter your 6-digit|worklog pin/i.test(replyText)) {
+            stage = 'AWAIT_PIN';
+          } else if (/enter your employee code|unrecognized employee code|did not match|sign in again|credentials_required/i.test(replyText)) {
+            stage = 'AWAIT_CODE';
+          } else if (status === 'error') {
+            stage = currentSessionStage;
+          } else {
+            stage = 'COLLECT';
+          }
+        }
+
+        // Keep module-level state in sync with the REAL backend so
+        // getAuthenticatedUser()/getCurrentStage() (used by the rest of the UI)
+        // reflect what actually happened server-side, not the local mock.
+        currentSessionStage = stage;
+        if (data.employee) {
+          authenticatedUser = {
+            id: data.employee.code,
+            code: data.employee.code,
+            name: data.employee.name,
+            email: data.employee.email || `${String(data.employee.code).toLowerCase()}@company.io`,
+            role: data.employee.role || 'EMPLOYEE',
+            department: data.employee.department || '',
+            timezone: data.employee.timezone || 'Asia/Kolkata',
+            hasPin: true,
+            projects: (data.employee.projects || []).map((p: any, i: number) => ({
+              id: p.id || `prj_${i}`,
+              code: p.code || `PRJ-${i}`,
+              name: p.name,
+              activities: p.activities || []
+            }))
+          };
+        }
+        if (stage === 'AWAIT_CODE') {
+          authenticatedUser = null;
+        }
+
+        // Parse multi-entries for structured card display if user message contains multiple items
+        let livePendingEntries: Partial<TimesheetEntry>[] | undefined;
+        if (/confirm:/i.test(replyText) || stage === 'SUMMARY' || stage === 'COLLECT') {
+          const user = authenticatedUser || DEMO_USERS[0];
+          const rawSegments = message.trim().split(/[\+;,]|(?:\b(?:and+|also|plus|with)\b)/i).map(s => s.trim()).filter(Boolean);
+          if (rawSegments.length > 1) {
+            livePendingEntries = rawSegments.map((seg) => {
+              const segLower = seg.toLowerCase();
+              let hours = 4.0;
+              const hMatch = seg.match(/(\d+(\.\d+)?)\s*(h|hr|hrs|hours?)/i) || seg.match(/\b(\d+(\.\d+)?)\b/);
+              if (hMatch) hours = parseFloat(hMatch[1]);
+
+              let act = user.projects[0]?.activities[0] || 'UX';
+              if (segLower.includes('ux') || segLower.includes('design')) act = 'UX';
+              else if (segLower.includes('backend') || segLower.includes('api')) act = 'Backend';
+              else if (segLower.includes('client') || segLower.includes('meeting')) act = 'Client Meeting';
+              else if (segLower.includes('front')) act = 'Front End';
+
+              return {
+                employeeCode: user.code,
+                employeeName: user.name,
+                workDate: new Date().toISOString().slice(0, 10),
+                project: user.projects[0]?.name || 'Evonsys',
+                activity: act,
+                hours,
+                taskDescription: seg
+              };
+            });
+          }
+        }
+
         return {
-          type: 'question',
-          stage: data.stage || 'COLLECT',
+          type: stage === 'SAVED' && (data.entry || data.entryId) ? 'saved' : status === 'error' ? 'error' : 'question',
+          stage,
           reply: replyText,
-          options: data.options || ['Confirm', 'Cancel', 'Help'],
+          options: data.options || [],
+          sessionId: browserSessionId,
+          status,
+          retryAfter: Number(data.retryAfter) || 0,
+          pendingEntries: livePendingEntries,
           rawPayload: data
         };
       }
+      liveFailure = res.status === 404
+        ? `The n8n timesheet workflow is not active (HTTP 404 from ${TIMESHEET_WEBHOOK_URL}). Publish/activate "Minori Timesheet — Chat Agent" and "Minori Timesheet — Log Entry" in n8n.`
+        : `n8n returned HTTP ${res.status} from ${TIMESHEET_WEBHOOK_URL}.`;
     } catch (e) {
-      // Fallback to local intelligent n8n engine mock
+      liveFailure = `Could not reach n8n at ${TIMESHEET_WEBHOOK_URL}. Is n8n running?`;
+    }
+
+    // Never fake a saved entry when the real backend failed: the demo engine below writes
+    // nothing to Google Sheets. It only runs when explicitly enabled with VITE_USE_MOCK_ENGINE=true.
+    if (!USE_MOCK_ENGINE) {
+      return {
+        type: 'error',
+        stage: currentSessionStage,
+        reply: `Nothing was saved. ${liveFailure}`,
+        options: [],
+        sessionId: browserSessionId,
+        status: 'error',
+      };
     }
 
     // Intelligent Mock Engine logic simulating n8n WF-01 state machine
@@ -209,11 +424,30 @@ export const api = {
         u => u.code.toLowerCase() === trimmed.toLowerCase() ||
              u.email.toLowerCase() === trimmed.toLowerCase() ||
              trimmed.toLowerCase().includes(u.code.toLowerCase()) ||
-             trimmed.toLowerCase().includes(u.name.toLowerCase().split(' ')[0])
+             (trimmed.length > 2 && trimmed.toLowerCase().includes(u.name.toLowerCase().split(' ')[0]))
       );
 
-      if (matchedUser || trimmed.toUpperCase().startsWith('EMP-')) {
-        const user = matchedUser || DEMO_USERS[0];
+      if (matchedUser || /^EMP-\d+$/i.test(trimmed) || trimmed.includes('@')) {
+        const empCode = matchedUser ? matchedUser.code : trimmed.toUpperCase().startsWith('EMP-') ? trimmed.toUpperCase() : `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
+        const user: UserProfile = matchedUser || {
+          id: `usr_${Date.now()}`,
+          code: empCode,
+          name: trimmed.includes('@') ? trimmed.split('@')[0] : `Employee ${empCode}`,
+          email: trimmed.includes('@') ? trimmed : `${empCode.toLowerCase()}@company.io`,
+          role: 'EMPLOYEE',
+          department: 'Product Engineering',
+          timezone: 'Asia/Kolkata',
+          hasPin: true,
+          projects: [
+            {
+              id: 'prj_01',
+              code: 'PRJ-MAIN',
+              name: 'Core Systems',
+              activities: ['Engineering', 'Design', 'Testing', 'Client Meeting']
+            }
+          ]
+        };
+
         authenticatedUser = user;
         currentSessionStage = 'AWAIT_PIN';
 
@@ -228,16 +462,16 @@ export const api = {
       return {
         type: 'question',
         stage: 'AWAIT_CODE',
-        reply: `⚠️ Unrecognized Employee Code or Email (\`${trimmed}\`).\n\nPlease enter a valid Employee Code (e.g. \`EMP-1001\`, \`EMP-1002\`, or \`EMP-1003\`) to sign in.`,
+        reply: `⚠️ Unrecognized Employee Code or Email (\`${trimmed}\`).\n\nPlease enter your Employee Code (e.g. \`EMP-1001\`) or corporate email to sign in.`,
         options: []
       };
     }
 
     // Stage 2: AWAIT_PIN (Verifying Password / PIN)
     if (currentSessionStage === 'AWAIT_PIN') {
-      const expectedPin = authenticatedUser?.code === 'EMP-1002' ? '123456' : authenticatedUser?.code === 'EMP-1003' ? '990011' : '849201';
+      const validPins = authenticatedUser?.code === 'EMP-1002' ? ['123456'] : authenticatedUser?.code === 'EMP-1003' ? ['990011'] : ['849201', '100000'];
 
-      if (trimmed === expectedPin || /^\d{6}$/.test(trimmed) || lower === '849201' || lower === '123456') {
+      if (validPins.includes(trimmed)) {
         currentSessionStage = 'COLLECT';
         const user = authenticatedUser || DEMO_USERS[0];
         const projs = user.projects.length > 0 ? user.projects.map(p => p.name).join(', ') : 'General Operations';
@@ -260,7 +494,7 @@ export const api = {
             `• Department: **${user.department}**\n` +
             `• Active Projects: **${projs}**\n\n` +
             `What work did you complete today (${new Date().toISOString().slice(0, 10)})?`,
-          options: user.projects[0]?.activities.slice(0, 3) || ['Worked 6.5 hours on Client Portal Frontend UI', 'Worked 4 hours on Workflow Orchestration', 'Show My Weekly Summary']
+          options: user.projects[0]?.activities.slice(0, 3).map(act => `Worked 4 hours on ${act}`) || ['Show My Weekly Summary']
         };
       }
 
@@ -318,81 +552,100 @@ export const api = {
     if (currentSessionStage === 'COLLECT' || currentSessionStage === 'ASSIGNED') {
       const user = authenticatedUser || DEMO_USERS[0];
 
-      // 1. Natural Language Hours NLP
-      let hours = 6.5;
-      const hourMatch = trimmed.match(/(\d+(\.\d+)?)\s*(h|hr|hrs|hours?)/i) || trimmed.match(/(\d+(\.\d+)?)\s*hours?/i);
-      if (hourMatch) {
-        hours = parseFloat(hourMatch[1]);
-      } else if (lower.includes('half day') || lower.includes('half a day')) {
-        hours = 4.0;
-      } else if (lower.includes('full day') || lower.includes('whole day') || lower.includes('9 to 5') || lower.includes('9am to 5pm')) {
-        hours = 8.0;
-      } else {
-        const standaloneNum = trimmed.match(/\b(\d+(\.\d+)?)\b/);
-        if (standaloneNum) hours = parseFloat(standaloneNum[1]);
+      // Split multi-work messages by 'and' (including typos like 'andd'), '+', ',', ';', 'also', 'plus'
+      const rawSegments = trimmed.split(/[\+;,]|(?:\b(?:and+|also|plus|with)\b)/i).map(s => s.trim()).filter(Boolean);
+      const segments = rawSegments.length > 0 ? rawSegments : [trimmed];
+
+      const extractedEntries: Partial<TimesheetEntry>[] = [];
+
+      for (const seg of segments) {
+        const segLower = seg.toLowerCase();
+
+        // 1. Natural Language Hours NLP
+        let hours = 4.0;
+        const hourMatch = seg.match(/(\d+(\.\d+)?)\s*(h|hr|hrs|hours?)/i) || seg.match(/(\d+(\.\d+)?)\s*hours?/i);
+        if (hourMatch) {
+          hours = parseFloat(hourMatch[1]);
+        } else if (segLower.includes('half day') || segLower.includes('half a day')) {
+          hours = 4.0;
+        } else if (segLower.includes('full day') || segLower.includes('whole day') || segLower.includes('9 to 5') || segLower.includes('9am to 5pm')) {
+          hours = 8.0;
+        } else {
+          const standaloneNum = seg.match(/\b(\d+(\.\d+)?)\b/);
+          if (standaloneNum) hours = parseFloat(standaloneNum[1]);
+        }
+
+        // 2. Date NLP
+        let workDate = new Date().toISOString().slice(0, 10);
+        if (segLower.includes('yesterday') || lower.includes('yesterday')) {
+          const yest = new Date();
+          yest.setDate(yest.getDate() - 1);
+          workDate = yest.toISOString().slice(0, 10);
+        }
+
+        // 3. Project & Activity NLP Matching
+        let selectedProj = user.projects[0]?.name || 'Evonsys';
+        if (segLower.includes('internal') || segLower.includes('agent') || segLower.includes('prompt') || segLower.includes('llm') || segLower.includes('workflow')) {
+          const matchedP = user.projects.find(p => p.name.toLowerCase().includes('agent') || p.name.toLowerCase().includes('internal'));
+          if (matchedP) selectedProj = matchedP.name;
+        } else if (segLower.includes('client') || segLower.includes('portal') || segLower.includes('frontend')) {
+          const matchedP = user.projects.find(p => p.name.toLowerCase().includes('portal') || p.name.toLowerCase().includes('client'));
+          if (matchedP) selectedProj = matchedP.name;
+        }
+
+        const activeProjectObj = user.projects.find(p => p.name === selectedProj) || user.projects[0];
+        let selectedAct = activeProjectObj?.activities[0] || 'Frontend UI Development';
+
+        if (segLower.includes('ux') || segLower.includes('ui design')) {
+          selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase() === 'ux' || a.toLowerCase().includes('ux')) || selectedAct;
+        } else if (segLower.includes('backend') || segLower.includes('api') || segLower.includes('integration')) {
+          selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase() === 'backend' || a.toLowerCase().includes('backend') || a.toLowerCase().includes('api')) || selectedAct;
+        } else if (segLower.includes('frontend') || segLower.includes('ui') || segLower.includes('react')) {
+          selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('front') || a.toLowerCase().includes('ui')) || selectedAct;
+        } else if (segLower.includes('test') || segLower.includes('testing') || segLower.includes('unit')) {
+          selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('test')) || selectedAct;
+        } else if (segLower.includes('workflow') || segLower.includes('n8n') || segLower.includes('orchestration')) {
+          selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('workflow')) || selectedAct;
+        } else if (segLower.includes('test') || segLower.includes('testing') || segLower.includes('unit')) {
+          selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('test')) || selectedAct;
+        } else if (segLower.includes('workflow') || segLower.includes('n8n') || segLower.includes('orchestration')) {
+          selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('workflow')) || selectedAct;
+        } else if (segLower.includes('prompt') || segLower.includes('gemini') || segLower.includes('llm')) {
+          selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('prompt')) || selectedAct;
+        } else if (segLower.includes('audit') || segLower.includes('security') || segLower.includes('scrub')) {
+          selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('security') || a.toLowerCase().includes('audit')) || selectedAct;
+        }
+
+        extractedEntries.push({
+          employeeCode: user.code,
+          employeeName: user.name,
+          workDate: workDate,
+          project: selectedProj,
+          activity: selectedAct,
+          hours: hours,
+          taskDescription: seg,
+          additionalComments: 'Extracted via WorkLog AI NLP Engine'
+        });
       }
 
-      // 2. Date NLP
-      let workDate = new Date().toISOString().slice(0, 10);
-      if (lower.includes('yesterday')) {
-        const yest = new Date();
-        yest.setDate(yest.getDate() - 1);
-        workDate = yest.toISOString().slice(0, 10);
-      }
-
-      // 3. Project & Activity NLP Matching
-      let selectedProj = user.projects[0]?.name || 'Client Portal Revamp';
-      if (lower.includes('internal') || lower.includes('agent') || lower.includes('prompt') || lower.includes('llm') || lower.includes('workflow')) {
-        const matchedP = user.projects.find(p => p.name.toLowerCase().includes('agent') || p.name.toLowerCase().includes('internal'));
-        if (matchedP) selectedProj = matchedP.name;
-      } else if (lower.includes('client') || lower.includes('portal') || lower.includes('frontend')) {
-        const matchedP = user.projects.find(p => p.name.toLowerCase().includes('portal') || p.name.toLowerCase().includes('client'));
-        if (matchedP) selectedProj = matchedP.name;
-      }
-
-      const activeProjectObj = user.projects.find(p => p.name === selectedProj) || user.projects[0];
-      let selectedAct = activeProjectObj?.activities[0] || 'Frontend UI Development';
-
-      if (lower.includes('frontend') || lower.includes('ui') || lower.includes('react') || lower.includes('design')) {
-        selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('frontend')) || selectedAct;
-      } else if (lower.includes('api') || lower.includes('integration') || lower.includes('backend')) {
-        selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('api')) || selectedAct;
-      } else if (lower.includes('test') || lower.includes('testing') || lower.includes('unit')) {
-        selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('test')) || selectedAct;
-      } else if (lower.includes('workflow') || lower.includes('n8n') || lower.includes('orchestration')) {
-        selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('workflow')) || selectedAct;
-      } else if (lower.includes('prompt') || lower.includes('gemini') || lower.includes('llm')) {
-        selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('prompt')) || selectedAct;
-      } else if (lower.includes('audit') || lower.includes('security') || lower.includes('scrub')) {
-        selectedAct = activeProjectObj?.activities.find(a => a.toLowerCase().includes('security') || a.toLowerCase().includes('audit')) || selectedAct;
-      }
-
-      currentPendingEntry = {
-        employeeCode: user.code,
-        employeeName: user.name,
-        workDate: workDate,
-        project: selectedProj,
-        activity: selectedAct,
-        hours: hours,
-        taskDescription: trimmed,
-        additionalComments: 'Extracted via WorkLog AI NLP Engine'
-      };
-
+      currentPendingEntries = extractedEntries;
+      currentPendingEntry = extractedEntries[0] || {};
       currentSessionStage = 'SUMMARY';
+
+      const summaryText = extractedEntries.map((e, i) =>
+        `• Entry ${extractedEntries.length > 1 ? (i + 1) + ': ' : ''}**${e.activity}** (${e.project}) — **${e.hours} hrs** on **${e.workDate}** (*"${e.taskDescription}"*)`
+      ).join('\n');
 
       return {
         type: 'summary',
         stage: 'SUMMARY',
-        reply: `Here is your extracted work log summary — please check it:\n\n` +
-          `• Employee Code: **${user.code}** (${user.name})\n` +
-          `• Date: **${currentPendingEntry.workDate}**\n` +
-          `• Project: **${currentPendingEntry.project}**\n` +
-          `• Activity: **${currentPendingEntry.activity}**\n` +
-          `• Contributed Hours: **${hours} hrs**\n` +
-          `• Task Description: *"${trimmed}"*\n\n` +
-          `Would you like to confirm and sign off this entry to save it to your Timesheet?`,
+        reply: `Here ${extractedEntries.length > 1 ? 'are your extracted work log entries' : 'is your extracted work log summary'} — please check:\n\n` +
+          `• Employee: **${user.code}** (${user.name})\n` +
+          `${summaryText}\n\n` +
+          `Would you like to confirm and sign off ${extractedEntries.length > 1 ? 'these entries' : 'this entry'} to save to your Timesheet?`,
         options: ['Confirm & Save', 'Edit Hours', 'Cancel'],
-        pendingEntry: currentPendingEntry
+        pendingEntry: currentPendingEntry,
+        pendingEntries: currentPendingEntries
       };
     }
 
@@ -400,40 +653,53 @@ export const api = {
     if (currentSessionStage === 'SUMMARY') {
       if (lower === 'confirm' || lower === 'confirm & save' || lower === 'yes' || lower === 'save') {
         const user = authenticatedUser || DEMO_USERS[0];
-        const newEntryId = `WL-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(16).substring(2, 8).toUpperCase()}`;
+        const entriesToSave = currentPendingEntries.length > 0 ? currentPendingEntries : [currentPendingEntry];
+        const savedIds: string[] = [];
 
-        const newEntry: TimesheetEntry = {
-          entryId: newEntryId,
-          employeeCode: user.code,
-          employeeName: user.name,
-          workDate: currentPendingEntry.workDate || new Date().toISOString().slice(0, 10),
-          project: currentPendingEntry.project || 'Client Portal Revamp',
-          activity: currentPendingEntry.activity || 'Frontend UI Development',
-          hours: currentPendingEntry.hours || 6.5,
-          taskDescription: currentPendingEntry.taskDescription || trimmed,
-          additionalComments: currentPendingEntry.additionalComments || 'Confirmed in chat',
-          status: 'LOGGED',
-          createdAt: new Date().toISOString(),
-          verifiedAt: new Date().toISOString()
-        };
+        for (const entry of entriesToSave) {
+          const newEntryId = `WL-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(16).substring(2, 8).toUpperCase()}`;
 
-        INITIAL_TIMESHEETS.unshift(newEntry);
-        INITIAL_AUDIT_LOGS.unshift({
-          id: `aud_${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          employeeCode: user.code,
-          event: 'CONFIRMED',
-          details: `Entry ${newEntry.entryId} logged ${newEntry.hours}h to ${newEntry.project}`,
-          sessionId: `sess_${Date.now().toString().slice(-5)}`,
-          status: 'SUCCESS'
-        });
+          const newEntry: TimesheetEntry = {
+            entryId: newEntryId,
+            employeeCode: user.code,
+            employeeName: user.name,
+            workDate: entry.workDate || new Date().toISOString().slice(0, 10),
+            project: entry.project || 'Evonsys',
+            activity: entry.activity || 'UX',
+            hours: entry.hours || 4.0,
+            taskDescription: entry.taskDescription || trimmed,
+            additionalComments: entry.additionalComments || 'Confirmed in chat',
+            status: 'LOGGED',
+            createdAt: new Date().toISOString(),
+            verifiedAt: new Date().toISOString()
+          };
+
+          const existingDraftIdx = INITIAL_TIMESHEETS.findIndex(
+            e => e.project.toLowerCase() === newEntry.project.toLowerCase() &&
+                 e.activity.toLowerCase() === newEntry.activity.toLowerCase() &&
+                 (!e.hours || e.hours === 0)
+          );
+
+          if (existingDraftIdx !== -1) {
+            INITIAL_TIMESHEETS[existingDraftIdx] = newEntry;
+          } else {
+            INITIAL_TIMESHEETS.unshift(newEntry);
+          }
+
+          savedIds.push(newEntryId);
+        }
 
         currentSessionStage = 'SAVED';
+        const savedCount = savedIds.length;
+        currentPendingEntries = [];
+        currentPendingEntry = {};
 
         return {
           type: 'saved',
           stage: 'SAVED',
-          reply: `✅ **Verified & Saved to Timesheet!**\nEntry ID: \`${newEntry.entryId}\` — **${newEntry.hours}h** logged for **${newEntry.workDate}**.\n\nAnything else you would like to log today?`,
+          reply: `✅ **Verified & Saved ${savedCount} ${savedCount === 1 ? 'entry' : 'entries'} to Timesheet!**\n` +
+            `Entry ID(s): ${savedIds.map(id => `\`${id}\``).join(', ')}\n\n` +
+            `Anything else you would like to log today?`,
           options: ['Log another entry', 'Show my weekly summary', 'Log Out']
         };
       }
@@ -443,6 +709,9 @@ export const api = {
       if (editHourMatch && (lower.includes('hour') || lower.includes('make') || lower.includes('change') || lower.includes('edit'))) {
         const newHours = parseFloat(editHourMatch[1]);
         currentPendingEntry.hours = newHours;
+        if (currentPendingEntries.length > 0) {
+          currentPendingEntries[0].hours = newHours;
+        }
 
         return {
           type: 'summary',
@@ -454,13 +723,15 @@ export const api = {
             `• Date: **${currentPendingEntry.workDate}**\n\n` +
             `Ready to confirm & save?`,
           options: ['Confirm & Save', 'Cancel'],
-          pendingEntry: currentPendingEntry
+          pendingEntry: currentPendingEntry,
+          pendingEntries: currentPendingEntries
         };
       }
 
       if (lower === 'cancel' || lower === 'no' || lower === 'edit') {
         currentSessionStage = 'COLLECT';
         currentPendingEntry = {};
+        currentPendingEntries = [];
         return {
           type: 'question',
           stage: 'COLLECT',
@@ -499,7 +770,37 @@ export const api = {
     return { ok: true, message: `WorkLog PIN enrolled successfully for ${employeeCode}.` };
   },
 
-  getTimesheets: async (): Promise<TimesheetEntry[]> => [...INITIAL_TIMESHEETS],
+  // Logged rows read live from the employee's TimeSheet tab via the n8n "Entries" workflow.
+  // Demo rows are only used when the offline mock engine is explicitly enabled.
+  getTimesheets: async (): Promise<TimesheetEntry[]> => {
+    if (USE_MOCK_ENGINE) return [...INITIAL_TIMESHEETS];
+    try {
+      const res = await fetch(ENTRIES_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetId: getStoredSheetId() }),
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      const rows: Record<string, unknown>[] = Array.isArray(data?.entries) ? data.entries : [];
+      const text = (v: unknown) => String(v ?? '').trim();
+      return rows.map((r) => ({
+        entryId: text(r['Entry ID']),
+        employeeCode: text(r['Employee Code']),
+        employeeName: text(r['Employee Name']),
+        workDate: text(r['Date']),
+        project: text(r['Project Name']),
+        activity: text(r['Activity Type']),
+        hours: Number(r['Contributed Hours']) || 0,
+        taskDescription: text(r['Task Description']),
+        additionalComments: text(r['Additional Comments']),
+        status: 'LOGGED' as const,
+        createdAt: text(r['Date']),
+      }));
+    } catch {
+      return [];
+    }
+  },
   getAuditLogs: async (): Promise<AuditEvent[]> => [...INITIAL_AUDIT_LOGS],
   getNotifications: async (): Promise<NotificationItem[]> => [...INITIAL_NOTIFICATIONS]
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, XCircle, Lock, Mic, MicOff, Code, RefreshCw, ShieldCheck, Terminal, Eye, EyeOff, UserCheck, KeyRound, LogOut } from 'lucide-react';
-import { api } from '../lib/api';
+import { Send, XCircle, Lock, Mic, MicOff, Code, RefreshCw, ShieldCheck, Terminal, Eye, EyeOff, UserCheck, KeyRound, LogOut, FileSpreadsheet, Settings } from 'lucide-react';
+import { api, getStoredSheetUrl } from '../lib/api';
 import { UserProfile, StageName, EngineResponse } from '../types';
 
 interface MessageItem {
@@ -12,10 +12,17 @@ interface MessageItem {
 }
 
 interface ChatThreadProps {
-  currentUser: UserProfile;
+  currentUser?: UserProfile | null;
+  onAuthSuccess?: (user: UserProfile) => void;
   onEntrySaved?: () => void;
   onResetSession?: () => void;
+  onOpenSheets?: () => void;
+  onConfigureSheets?: () => void;
 }
+
+// The agent ends its confirmation question with "(yes/no)"; those messages get Yes / No buttons.
+const YES_NO_SUFFIX = /\s*\(yes\s*\/\s*no\)\s*$/i;
+const isYesNoQuestion = (m: MessageItem) => m.sender === 'bot' && YES_NO_SUFFIX.test(m.text);
 
 const STAGES: { key: StageName; label: string }[] = [
   { key: 'AWAIT_CODE', label: '1. Login' },
@@ -25,18 +32,18 @@ const STAGES: { key: StageName; label: string }[] = [
   { key: 'SAVED', label: '5. Saved' },
 ];
 
-export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySaved, onResetSession }) => {
+export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onAuthSuccess, onEntrySaved, onResetSession, onOpenSheets, onConfigureSheets }) => {
   const [messages, setMessages] = useState<MessageItem[]>([
     {
       id: 'init-1',
       sender: 'bot',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      text: `👋 Welcome to WorkLog AI!\n\nTo start your work logging session, please enter your Employee Code to log in.`,
+      text: `Hello, welcome to the Minori Labs Timesheet Agent.\n\nPlease enter your Employee Code.`,
       engineResponse: {
         type: 'question',
         stage: 'AWAIT_CODE',
-        reply: `👋 Welcome to WorkLog AI!\n\nTo start your work logging session, please enter your Employee Code to log in.`,
-        options: ['EMP-1001 (Sarah Connor)', 'EMP-1002 (Alex Mercer)', 'EMP-1003 (Elena Rostova)']
+        reply: `Hello, welcome to the Minori Labs Timesheet Agent.\n\nPlease enter your Employee Code.`,
+        options: []
       }
     }
   ]);
@@ -47,6 +54,21 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
   const [showPassword, setShowPassword] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [rawDebugData, setRawDebugData] = useState<any>(null);
+  // Rate limiting: the backend returns status 'rate_limited' + retryAfter (seconds).
+  const [retryUntil, setRetryUntil] = useState<number>(0);
+  const [retrySeconds, setRetrySeconds] = useState<number>(0);
+
+  useEffect(() => {
+    if (!retryUntil) return;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((retryUntil - Date.now()) / 1000));
+      setRetrySeconds(left);
+      if (left === 0) setRetryUntil(0);
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [retryUntil]);
 
   // Speech simulation state
   const [isListening, setIsListening] = useState(false);
@@ -70,12 +92,12 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
         id: crypto.randomUUID(),
         sender: 'bot',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        text: `🔄 Session reset. 👋 Please enter your Employee Code to log in.`,
+        text: `Hello, welcome to the Minori Labs Timesheet Agent.\n\nPlease enter your Employee Code.`,
         engineResponse: {
           type: 'question',
           stage: 'AWAIT_CODE',
-          reply: `🔄 Session reset. 👋 Please enter your Employee Code to log in.`,
-          options: ['EMP-1001', 'EMP-1002', 'EMP-1003']
+          reply: `Hello, welcome to the Minori Labs Timesheet Agent.\n\nPlease enter your Employee Code.`,
+          options: []
         }
       }
     ]);
@@ -83,22 +105,25 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
   };
 
   const handleSend = async (textToSend?: string) => {
-    // If textToSend includes label like "EMP-1001 (Sarah Connor)", extract the code "EMP-1001"
     let text = (textToSend || input).trim();
     if (text.includes('(') && text.includes(')')) {
       const match = text.match(/EMP-\d+/i);
       if (match) text = match[0];
     }
 
-    if (!text || loading) return;
+    if (!text || loading || retrySeconds > 0) return;
 
     const userMsgId = crypto.randomUUID();
     const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Mask display text if password stage
-    const displayUserText = currentStage === 'AWAIT_PIN' && !showPassword && /^\d+$/.test(text)
-      ? '• '.repeat(text.length).trim()
-      : text;
+    // Mask the password in the chat bubble: "Emp Code - 500410 - Password - 199", "500410 / 199" or a bare PIN
+    const maskPassword = (t: string) => {
+      if (/^\d+$/.test(t)) return '• '.repeat(t.length).trim();
+      const keyword = t.replace(/\b(password|passwd|pwd)(\s*(?:is\s+)?[:=\-–—]*\s*)(\S+)/i, (_m, k, sep, v) => `${k}${sep}${'•'.repeat(v.length)}`);
+      if (keyword !== t) return keyword;
+      return t.replace(/^(\s*[A-Za-z]*-?\d{3,}\s*[/|,]\s*)(\S+)\s*$/, (_m, head, v) => `${head}${'•'.repeat(v.length)}`);
+    };
+    const displayUserText = currentStage === 'AWAIT_PIN' && !showPassword ? maskPassword(text) : text;
 
     setMessages((prev) => [
       ...prev,
@@ -108,9 +133,22 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
     setLoading(true);
 
     try {
-      const res = await api.sendMessage(text, userMsgId, currentUser.code);
+      const activeUserCode = api.getAuthenticatedUser()?.code || currentUser?.code || '';
+      const res = await api.sendMessage(text, userMsgId, activeUserCode);
       setRawDebugData(res);
-      if (res.stage) setCurrentStage(res.stage);
+      if (res.status === 'rate_limited' && res.retryAfter) {
+        setRetryUntil(Date.now() + res.retryAfter * 1000);
+      } else if (res.stage) {
+        setCurrentStage(res.stage);
+      }
+
+      // Check if authentication just succeeded
+      const authUser = api.getAuthenticatedUser();
+      if (authUser && (res.stage === 'COLLECT' || res.stage === 'SUMMARY' || res.stage === 'SAVED')) {
+        if (onAuthSuccess) {
+          onAuthSuccess(authUser);
+        }
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -150,7 +188,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
         } else if (currentStage === 'AWAIT_PIN') {
           setInput('849201');
         } else {
-          setInput('Worked 6.5 hours on Client Portal Frontend UI');
+          setInput('Worked 4 hours on Frontend Development');
         }
         setIsListening(false);
       }, 1500);
@@ -196,6 +234,36 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          <div className="inline-flex items-center rounded bg-zinc-900 border border-zinc-800 p-0.5">
+            <button
+              onClick={() => {
+                if (onOpenSheets) {
+                  onOpenSheets();
+                } else {
+                  window.open(getStoredSheetUrl(), '_blank');
+                }
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono text-emerald-400 hover:text-white hover:bg-zinc-800 rounded transition-all cursor-pointer"
+              title="Open Google Sheets Database Page"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" /> Google Sheets ↗
+            </button>
+            {onConfigureSheets && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onConfigureSheets();
+                }}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-mono text-zinc-300 hover:text-white hover:bg-zinc-800 rounded transition-colors cursor-pointer border-l border-zinc-800 ml-0.5"
+                title="Configure Google Sheet Link / ID"
+              >
+                <Settings className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-[11px]">Edit Link</span>
+              </button>
+            )}
+          </div>
+
           <button
             onClick={handleResetSession}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 cursor-pointer transition-all"
@@ -242,14 +310,40 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
                   </span>
                 </div>
 
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{m.text}</p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {isYesNoQuestion(m) ? m.text.replace(YES_NO_SUFFIX, '').trimEnd() : m.text}
+                </p>
 
-                {/* Structured Pending Entry Card */}
-                {m.engineResponse?.pendingEntry && (
-                  <div className="mt-4 p-4 rounded bg-black border border-zinc-800 font-sans">
+                {/* Yes / No buttons for the agent's confirmation question. Only the latest one is clickable. */}
+                {isYesNoQuestion(m) && (
+                  <div className="mt-3.5 flex gap-2 pt-3 border-t border-zinc-800">
+                    {(['Yes', 'No'] as const).map((answer) => {
+                      const isLatest = m.id === messages[messages.length - 1]?.id;
+                      return (
+                        <button
+                          key={answer}
+                          type="button"
+                          onClick={() => handleSend(answer.toLowerCase())}
+                          disabled={!isLatest || loading || retrySeconds > 0}
+                          className={`px-5 py-2 rounded text-sm font-semibold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                            answer === 'Yes'
+                              ? 'bg-white text-black hover:bg-zinc-200'
+                              : 'bg-zinc-950 text-zinc-200 border border-zinc-700 hover:bg-zinc-800'
+                          }`}
+                        >
+                          {answer}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Structured Pending Entry Cards */}
+                {(m.engineResponse?.pendingEntries || (m.engineResponse?.pendingEntry ? [m.engineResponse.pendingEntry] : [])).map((entry, idx) => (
+                  <div key={idx} className="mt-4 p-4 rounded bg-black border border-zinc-800 font-sans">
                     <div className="flex items-center justify-between text-xs text-white font-bold mb-3 border-b border-zinc-800 pb-2">
                       <span className="flex items-center gap-1.5 font-mono">
-                        <Terminal className="w-3.5 h-3.5 text-zinc-400" /> Extracted Work Log Details
+                        <Terminal className="w-3.5 h-3.5 text-zinc-400" /> Extracted Work Log Details {m.engineResponse?.pendingEntries && m.engineResponse.pendingEntries.length > 1 ? `#${idx + 1}` : ''}
                       </span>
                       <span className="text-[10px] font-mono bg-zinc-900 text-zinc-300 px-2 py-0.5 rounded border border-zinc-800">
                         Confidence 98%
@@ -259,23 +353,23 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div>
                         <span className="text-zinc-400 text-[10px] block font-mono">Employee Code</span>
-                        <span className="font-semibold text-white">{m.engineResponse.pendingEntry.employeeCode || 'EMP-1001'}</span>
+                        <span className="font-semibold text-white">{entry.employeeCode || currentUser?.code || '—'}</span>
                       </div>
                       <div>
                         <span className="text-zinc-400 text-[10px] block font-mono">Project</span>
-                        <span className="font-semibold text-white">{m.engineResponse.pendingEntry.project || '—'}</span>
+                        <span className="font-semibold text-white">{entry.project || '—'}</span>
                       </div>
                       <div>
                         <span className="text-zinc-400 text-[10px] block font-mono">Activity</span>
-                        <span className="font-semibold text-white">{m.engineResponse.pendingEntry.activity || '—'}</span>
+                        <span className="font-semibold text-white">{entry.activity || '—'}</span>
                       </div>
                       <div>
                         <span className="text-zinc-400 text-[10px] block font-mono">Hours</span>
-                        <span className="font-mono font-bold text-white text-sm">{m.engineResponse.pendingEntry.hours} hrs</span>
+                        <span className="font-mono font-bold text-white text-sm">{entry.hours} hrs</span>
                       </div>
                     </div>
                   </div>
-                )}
+                ))}
 
                 {/* Interactive Option Chips */}
                 {m.engineResponse?.options && m.engineResponse.options.length > 0 && (
@@ -332,47 +426,37 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
         <span className="text-[11px] font-semibold text-zinc-500 shrink-0 font-mono">Quick Input:</span>
 
         {currentStage === 'AWAIT_CODE' && (
-          <>
-            <button
-              onClick={() => handleSend('EMP-1001')}
-              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 shrink-0 cursor-pointer flex items-center gap-1.5"
-            >
-              <UserCheck className="w-3 h-3 text-white" /> EMP-1001 (Sarah Connor)
-            </button>
-            <button
-              onClick={() => handleSend('EMP-1002')}
-              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 shrink-0 cursor-pointer flex items-center gap-1.5"
-            >
-              <UserCheck className="w-3 h-3 text-zinc-400" /> EMP-1002 (Alex Mercer)
-            </button>
-          </>
+          <span className="text-[11px] text-zinc-400 font-mono">
+            Enter your Employee Code to begin authentication
+          </span>
         )}
 
         {currentStage === 'AWAIT_PIN' && (
-          <>
-            <button
-              onClick={() => handleSend('849201')}
-              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 shrink-0 cursor-pointer flex items-center gap-1.5"
-            >
-              <KeyRound className="w-3 h-3 text-white" /> Use Demo PIN: 849201
-            </button>
-          </>
+          <span className="text-[11px] text-zinc-400 font-mono">
+            🔒 Enter your 6-digit PIN password
+          </span>
         )}
 
         {(currentStage === 'COLLECT' || currentStage === 'SAVED') && (
           <>
-            <button
-              onClick={() => handleSend('Worked 6.5 hours on Client Portal Frontend UI Development')}
-              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 shrink-0 cursor-pointer"
-            >
-              + 6.5h Client Portal Frontend UI
-            </button>
-            <button
-              onClick={() => handleSend('Worked 4 hours on Workflow Orchestration')}
-              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 shrink-0 cursor-pointer"
-            >
-              + 4h Internal AI Agents Track
-            </button>
+            {currentUser?.projects && currentUser.projects.length > 0 ? (
+              currentUser.projects.slice(0, 2).map((p) => (
+                <button
+                  key={p.id || p.code}
+                  onClick={() => handleSend(`Worked 4 hours on ${p.name} ${p.activities[0] || ''}`)}
+                  className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 shrink-0 cursor-pointer"
+                >
+                  + 4h {p.name}
+                </button>
+              ))
+            ) : (
+              <button
+                onClick={() => handleSend('Worked 4 hours on General Project Tasks')}
+                className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 shrink-0 cursor-pointer"
+              >
+                + 4h General Tasks
+              </button>
+            )}
             <button
               onClick={() => handleSend('Show My Weekly Summary')}
               className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 shrink-0 cursor-pointer"
@@ -406,12 +490,15 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            disabled={retrySeconds > 0}
             placeholder={
-              currentStage === 'AWAIT_CODE'
-                ? "Enter your Employee Code (e.g. 'EMP-1001')..."
+              retrySeconds > 0
+                ? `Too many messages. You can send again in ${retrySeconds}s...`
+                : currentStage === 'AWAIT_CODE'
+                ? "Enter your Employee Code (e.g. EMP-1001)..."
                 : currentStage === 'AWAIT_PIN'
-                ? "Enter your 6-digit PIN / Password (e.g. 849201)..."
-                : "Describe your work (e.g. 'Worked 6.5 hours on Client Portal Frontend UI')..."
+                ? "Enter your 6-digit PIN password..."
+                : "Describe your work (e.g. 'Worked 4 hours on Frontend UI Development')..."
             }
             className={`w-full bg-zinc-900 border border-zinc-800 text-white py-3 rounded focus:outline-none focus:border-zinc-500 text-sm placeholder-zinc-500 ${
               currentStage === 'AWAIT_PIN' ? 'pl-10 pr-10 font-mono tracking-wider' : 'px-4'
@@ -432,10 +519,10 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ currentUser, onEntrySave
 
         <button
           onClick={() => handleSend()}
-          disabled={loading || !input.trim()}
+          disabled={loading || !input.trim() || retrySeconds > 0}
           className="bg-white hover:bg-zinc-200 disabled:opacity-40 text-black font-semibold px-5 py-3 rounded text-sm transition-all cursor-pointer flex items-center gap-2 shadow-sm"
         >
-          <Send className="w-4 h-4" /> Send
+          <Send className="w-4 h-4" /> {retrySeconds > 0 ? `${retrySeconds}s` : 'Send'}
         </button>
       </div>
     </div>

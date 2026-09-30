@@ -44,14 +44,37 @@ export interface TimesheetEntry {
   verifiedAt?: string;
 }
 
+export interface ColumnDef {
+  key: keyof TimesheetEntry;
+  label: string;
+  isMono?: boolean;
+}
+
+export const TIMESHEET_COLUMN_DEFS: ColumnDef[] = [
+  { key: 'entryId', label: 'Entry ID', isMono: true },
+  { key: 'employeeCode', label: 'Employee Code', isMono: true },
+  { key: 'employeeName', label: 'Employee Name' },
+  { key: 'workDate', label: 'Date', isMono: true },
+  { key: 'project', label: 'Project Name' },
+  { key: 'activity', label: 'Activity Type' },
+  { key: 'hours', label: 'Contributed Hours', isMono: true },
+  { key: 'taskDescription', label: 'Task Description' },
+  { key: 'additionalComments', label: 'Additional Comments' },
+];
+
+export type EngineStatus = 'ok' | 'needs_credentials' | 'rate_limited' | 'error';
+
 export interface EngineResponse {
   type: 'question' | 'summary' | 'saved' | 'info' | 'error' | 'form_fallback';
   reply: string;
   stage?: StageName;
   options?: string[];
   pendingEntry?: Partial<TimesheetEntry>;
+  pendingEntries?: Partial<TimesheetEntry>[];
   missingFields?: string[];
   sessionId?: string;
+  status?: EngineStatus;
+  retryAfter?: number; // seconds; set when status is 'rate_limited'
   rawPayload?: any;
 }
 

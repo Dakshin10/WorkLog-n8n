@@ -1,0 +1,293 @@
+{
+  "id": "MinoriTsEntries1",
+  "name": "Minori Timesheet — Entries",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "timesheet-entries",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7f5a5fb2-53aa-74db-512e-e647d53049a6",
+      "name": "Receive Entries Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "3aa4d76c-00a1-f219-d86c-c68532b3eeda"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3bc41da0-e46d-4775-358d-51713ee9535b",
+              "leftValue": "={{ String($('Receive Entries Request').first().json.body?.sheetId ?? '').trim() }}",
+              "rightValue": "^[A-Za-z0-9_-]{20,}$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "ea023dfd-2f34-e4de-b683-1af2e04f87e3",
+      "name": "Has Sheet ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "724bcd31-c86b-c68e-ef5f-2ad4a15c3e9f",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "8cd9f112-a85a-c7e9-48d4-4e147ee89e44",
+              "name": "reply",
+              "value": "I don't know which timesheet to open. Please sign in again.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1cd3705a-f8cc-67e1-74a8-e4cd1c2d4eb8",
+      "name": "Missing Sheet ID",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ String($('Receive Entries Request').first().json.body.sheetId).trim() }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "TimeSheet"
+        },
+        "options": {}
+      },
+      "id": "bfe5ebb9-056b-c279-4e95-0c7b3a0454ff",
+      "name": "Read TimeSheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        300
+      ],
+      "credentials": {
+        "googleApi": "Minori Sheets"
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0ee9e57d-24bc-630b-0c7b-b1acdf18a761",
+              "leftValue": "={{ String($json['Entry ID'] ?? '').trim() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f85447a3-79e1-d793-ae13-86954bf85275",
+      "name": "Logged Rows Only",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        300
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "entries",
+        "options": {}
+      },
+      "id": "394f4798-1945-73e2-ab92-acdd2bd9babc",
+      "name": "Collect Entries",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ status: 'ok', entries: $json.entries.filter(e => e['Entry ID']) }) }}",
+        "options": {}
+      },
+      "id": "6805276f-7710-394f-b531-b8bb482d3fec",
+      "name": "Entries Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "bd87f5dc-c96a-4355-78d4-f7ca89c20e31",
+      "name": "Respond to Dashboard",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1440,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Entries Request": {
+      "main": [
+        [
+          {
+            "node": "Has Sheet ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Sheet ID?": {
+      "main": [
+        [
+          {
+            "node": "Read TimeSheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Missing Sheet ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read TimeSheet": {
+      "main": [
+        [
+          {
+            "node": "Logged Rows Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logged Rows Only": {
+      "main": [
+        [
+          {
+            "node": "Collect Entries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Entries": {
+      "main": [
+        [
+          {
+            "node": "Entries Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entries Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Missing Sheet ID": {
+      "main": [
+        [
+          {
+            "node": "Respond to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": []
+}

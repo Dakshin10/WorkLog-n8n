@@ -1,0 +1,1330 @@
+{
+  "id": "MinoriTsAgent001",
+  "name": "Minori Timesheet — Chat Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "timesheet-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e5dbd0a9-6ce1-99b6-c8fb-ff04a0de7c21",
+      "name": "Receive Chat Message",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "7a107f7f-24bc-1a87-037c-2a5f795b9609"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sliding-window rate limiter backed by workflow static data.\n// Static data persists only for production (active) executions and resets on restart.\n// Multi-worker deployments: replace this node with Redis INCR + EXPIRE.\nconst MIN = 60 * 1000;\nconst BUCKETS = {\n  session: { limit: 20, windowMs: 10 * MIN },\n  sheet: { limit: 60, windowMs: 10 * MIN },\n  global: { limit: 300, windowMs: 60 * MIN },\n};\nconst FAIL_WINDOW_MS = 15 * MIN;\n\nconst store = $getWorkflowStaticData('global');\nstore.rl = store.rl || {};\nstore.rl.session = store.rl.session || {};\nstore.rl.sheet = store.rl.sheet || {};\nstore.rl.global = store.rl.global || [];\nstore.rl.fails = store.rl.fails || {};\n\nconst now = Date.now();\nconst body = $input.first().json.body || {};\nconst sessionId = String(body.sessionId ?? '').trim() || 'anonymous';\nconst sheetId = String(body.sheetId ?? '').trim();\n\n// Prune expired timestamps so static data cannot grow unbounded.\nconst prune = (list, windowMs) => (list || []).filter((t) => now - t < windowMs);\nfor (const kind of ['session', 'sheet']) {\n  for (const key of Object.keys(store.rl[kind])) {\n    store.rl[kind][key] = prune(store.rl[kind][key], BUCKETS[kind].windowMs);\n    if (!store.rl[kind][key].length) delete store.rl[kind][key];\n  }\n}\nstore.rl.global = prune(store.rl.global, BUCKETS.global.windowMs);\nfor (const key of Object.keys(store.rl.fails)) {\n  const f = store.rl.fails[key];\n  f.times = prune(f.times, FAIL_WINDOW_MS);\n  if (f.lockedUntil && f.lockedUntil <= now) f.lockedUntil = 0;\n  if (!f.times.length && !f.lockedUntil) delete store.rl.fails[key];\n}\n\n// Failed-credential lockout. Keys are \"sheetId|empCode\"; one sheet is one employee,\n// so any active lock on this sheet blocks it (the frontend may not know the code yet).\nlet lockedUntil = 0;\nif (sheetId) {\n  for (const [key, f] of Object.entries(store.rl.fails)) {\n    if (key.startsWith(sheetId + '|') && f.lockedUntil > lockedUntil) lockedUntil = f.lockedUntil;\n  }\n}\nif (lockedUntil > now) {\n  return [{ json: { throttled: true, reason: 'locked', retryAfter: Math.ceil((lockedUntil - now) / 1000), sessionId, sheetId } }];\n}\n\n// Volume buckets.\nconst lists = [\n  [store.rl.session[sessionId] || [], BUCKETS.session],\n  [store.rl.global, BUCKETS.global],\n];\nif (sheetId) lists.push([store.rl.sheet[sheetId] || [], BUCKETS.sheet]);\n\nlet retryAfter = 0;\nfor (const [list, cfg] of lists) {\n  if (list.length >= cfg.limit) {\n    retryAfter = Math.max(retryAfter, Math.ceil((list[0] + cfg.windowMs - now) / 1000));\n  }\n}\nif (retryAfter > 0) {\n  return [{ json: { throttled: true, reason: 'volume', retryAfter, sessionId, sheetId } }];\n}\n\n(store.rl.session[sessionId] = store.rl.session[sessionId] || []).push(now);\nstore.rl.global.push(now);\nif (sheetId) (store.rl.sheet[sheetId] = store.rl.sheet[sheetId] || []).push(now);\n\nreturn [{ json: { throttled: false, reason: '', retryAfter: 0, sessionId, sheetId } }];\n"
+      },
+      "id": "127e64e1-e209-2cec-6972-c0d6c3ef19ee",
+      "name": "Rate Limiter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b951ea6-0ee9-5d9f-34f2-0eba9abfdfb6",
+              "leftValue": "={{ $json.throttled === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "bec0c442-8d5b-1d40-9e6b-d021b64bdfb5",
+      "name": "Throttled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ade4cfe3-bab8-8e96-1645-de300ccf5093",
+              "name": "sessionId",
+              "value": "={{ $json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "4361f51d-43a4-7867-9a0f-676ab48bcfce",
+              "name": "reply",
+              "value": "={{ $json.reason === 'locked' ? \"Too many failed attempts. Please try again in 15 minutes or contact your manager.\" : \"You're sending messages faster than I can handle. Please try again in a minute.\" }}",
+              "type": "string"
+            },
+            {
+              "id": "7939b100-cfd0-b15f-53d8-ee33548768f8",
+              "name": "status",
+              "value": "rate_limited",
+              "type": "string"
+            },
+            {
+              "id": "3becc5ca-b773-1072-7998-47b2ecadefa9",
+              "name": "retryAfter",
+              "value": "={{ $json.retryAfter }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3eae9e60-478b-0b82-1887-3960646b56a9",
+      "name": "Throttled Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        660,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "51bf0966-363c-83fc-2027-f21f8cf86b65",
+              "leftValue": "={{ String($('Receive Chat Message').first().json.body.sheetId ?? '').trim() }}",
+              "rightValue": "^[A-Za-z0-9_-]{20,}$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "70d222b8-75e0-0dec-a1b8-617b23eee039",
+      "name": "Has Sheet ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7a1c2014-d2ca-fd22-8bb3-3e045aeec8e5",
+              "name": "sessionId",
+              "value": "={{ String($('Receive Chat Message').first().json.body.sessionId ?? '') }}",
+              "type": "string"
+            },
+            {
+              "id": "8cd9f112-a85a-c7e9-48d4-4e147ee89e44",
+              "name": "reply",
+              "value": "I don't know which timesheet to open. Please sign in again.",
+              "type": "string"
+            },
+            {
+              "id": "f45a440a-f843-82f8-9308-bd770c817e82",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "3fbe4f57-df67-8c2f-f018-338710068fff",
+              "name": "retryAfter",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5f6e06aa-1b80-736e-fb69-e226dd2df9f0",
+      "name": "Missing Sheet Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pulls emp_code / password out of free text BEFORE the agent runs, and replaces\n// the password with \"[provided]\" so it never reaches Gemini or the chat memory.\n// The real value is handed to the verify / log tools directly from this node.\n// Also reports whether this chat session is already verified (set by Record Credential Outcome).\nconst AWAIT_PASSWORD_MS = 10 * 60 * 1000;\n\nconst store = $getWorkflowStaticData('global');\nstore.auth = store.auth || {};       // \"sessionId:sheetId\" -> { empCode, until }\nstore.awaitPw = store.awaitPw || {}; // \"sessionId:sheetId\" -> { at, empCode } when the agent asked for the password\n\nconst body = $('Receive Chat Message').first().json.body || {};\nconst key = (String(body.sessionId ?? '').trim() || 'anonymous') + ':' + String(body.sheetId ?? '').trim();\nconst now = Date.now();\nfor (const k of Object.keys(store.auth)) if (!(store.auth[k].until > now)) delete store.auth[k];\nfor (const k of Object.keys(store.awaitPw)) if (!(now - (store.awaitPw[k]?.at ?? 0) <= AWAIT_PASSWORD_MS)) delete store.awaitPw[k];\nconst pending = store.awaitPw[key];\n\nconst raw = String(body.message ?? '');\nlet empCode = '';\nlet password = '';\nlet message = raw.replace(/\\b(andd+|amp|plus|\\+)\\b/gi, 'and');\n\nconst pw = /\\b(password|passwd|pwd)\\b\\s*(?:is\\s+)?[:=\\-–—]*\\s*(\\S+)/i.exec(raw);\nif (pw) {\n  password = pw[2].replace(/[.,;]+$/, '');\n  const start = pw.index;\n  message = raw.slice(0, start) + pw[1] + ' - [provided]' + raw.slice(start + pw[0].length);\n  const code = /\\b(?:emp(?:loyee)?\\s*(?:code|id|no\\.?|number)?|code)\\b\\s*(?:is\\s+)?[:=\\-–—]*\\s*([A-Za-z0-9-]*\\d[A-Za-z0-9-]*)/i.exec(raw);\n  if (code) empCode = code[1];\n} else {\n  // \"500410 / 199\", \"500410 | 199\", \"500410, 199\"\n  const pair = /^\\s*([A-Za-z]*-?\\d{3,})\\s*[\\/|,]\\s*(\\S+)\\s*$/.exec(raw);\n  if (pair) {\n    empCode = pair[1];\n    password = pair[2];\n    message = empCode + ' / [provided]';\n  } else if (/^\\s*(?:EMP-\\d+|[A-Za-z]{2,}-\\d+)\\s*$/i.test(raw.trim())) {\n    empCode = raw.trim().toUpperCase();\n    message = empCode;\n    password = '';\n  } else if (pending && /^\\S+$/.test(raw.trim())) {\n    // The agent's last reply asked for the password and this reply is one token: it is the password.\n    password = raw.trim();\n    message = '[password provided]';\n  }\n}\n// awaitPw is cleared by Record Credential Outcome only after the agent answers, so a password\n// resent after a failed run (e.g. a Gemini outage) is still recognised.\n\nconst auth = store.auth[key];\n// A bare password is checked against the Employee Code the user sent just before being asked for it.\nif (password && !empCode && pending) empCode = pending.empCode || '';\n\nreturn [{ json: { message, empCode, password, credentialsProvided: password !== '', verifiedEmpCode: auth ? auth.empCode : '' } }];\n"
+      },
+      "id": "7451cf79-8d96-1d05-0143-b20904b9fdf6",
+      "name": "Parse Credentials",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6bcacabe-ea67-fa60-f793-5c8ab2e5efdc",
+              "leftValue": "={{ $json.credentialsProvided }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "08c3c1f3-cce0-f442-cbbc-ffe5a7a4f33c",
+      "name": "Password Supplied?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        990,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "MinoriTsLogEntry"
+        },
+        "mode": "once",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sheetId": "={{ String($('Receive Chat Message').first().json.body.sheetId).trim() }}",
+            "emp_code": "={{ $('Parse Credentials').first().json.empCode }}",
+            "password": "={{ $('Parse Credentials').first().json.password }}",
+            "mode": "verify",
+            "verified_emp_code": "",
+            "activity_name": "",
+            "hours": 0,
+            "work_date": "",
+            "task_description": "",
+            "comments": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sheetId",
+              "displayName": "sheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "emp_code",
+              "displayName": "emp_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "password",
+              "displayName": "password",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "activity_name",
+              "displayName": "activity_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "hours",
+              "displayName": "hours",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "work_date",
+              "displayName": "work_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "task_description",
+              "displayName": "task_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "comments",
+              "displayName": "comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "verified_emp_code",
+              "displayName": "verified_emp_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "3475f4b2-637d-de58-06d5-5ec32eaa8a79",
+      "name": "Verify Credentials",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "formatDate",
+        "date": "={{ $now }}",
+        "format": "yyyy-MM-dd",
+        "outputFieldName": "today",
+        "options": {
+          "timezone": true
+        }
+      },
+      "id": "457f6358-2b7a-d8c9-1f38-e166f2b5bb90",
+      "name": "Today in Kolkata",
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7961abdc-0abc-3fd9-e280-1951af1663cd",
+              "name": "sessionId",
+              "value": "={{ String($('Receive Chat Message').first().json.body.sessionId ?? '').trim() || 'anonymous' }}",
+              "type": "string"
+            },
+            {
+              "id": "79c9e7de-7cad-f982-5b84-6386c704e1ec",
+              "name": "sheetId",
+              "value": "={{ String($('Receive Chat Message').first().json.body.sheetId).trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "5aa65548-f95f-8208-56ff-df210ff08c72",
+              "name": "empCode",
+              "value": "={{ String($('Receive Chat Message').first().json.body.empCode ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "ec529122-eadc-f65b-3bbe-6b2e15336911",
+              "name": "message",
+              "value": "={{ $('Parse Credentials').first().json.message + ($('Verify Credentials').isExecuted ? ' (verification result: ' + ($('Verify Credentials').first().json.ok === true ? 'ok — emp_name: ' + $('Verify Credentials').first().json.emp_name + ', project_name: ' + $('Verify Credentials').first().json.project_name : ($('Verify Credentials').first().json.reason || 'sheet_unavailable')) + ')' : '') }}",
+              "type": "string"
+            },
+            {
+              "id": "8ee76091-5be2-1312-cae9-17942f5eeb6d",
+              "name": "verifiedEmpCode",
+              "value": "={{ $('Verify Credentials').isExecuted && $('Verify Credentials').first().json.ok === true ? String($('Verify Credentials').first().json.emp_code) : $('Parse Credentials').first().json.verifiedEmpCode }}",
+              "type": "string"
+            },
+            {
+              "id": "abc488bd-9d07-2133-ca23-5a29bbcc4d86",
+              "name": "today",
+              "value": "={{ $json.today }}",
+              "type": "string"
+            },
+            {
+              "id": "8130fa48-27f2-8d2a-e741-192f12a2423c",
+              "name": "memoryKey",
+              "value": "={{ (String($('Receive Chat Message').first().json.body.sessionId ?? '').trim() || 'anonymous') + ':' + String($('Receive Chat Message').first().json.body.sheetId).trim() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b97b6ca6-3a50-cf18-3e30-fd6047a6c730",
+      "name": "Normalise Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "=You are the Minori Labs Timesheet Agent. Minori Labs are prompt-based integrators —\nfilling a timesheet should feel like a short conversation, not a form.\n\nToday's date is {{ $json.today }} (Asia/Kolkata).\nSession: {{ $json.verifiedEmpCode ? 'VERIFIED as Employee Code ' + $json.verifiedEmpCode : 'NOT VERIFIED' }}.\n\nYou are working inside ONE employee's own timesheet. Everything you report about it must\ncome from a tool call against that live sheet.\n\nCONVERSATION FLOW — always follow these steps in order.\nStep 1 - Greeting. If the session is NOT VERIFIED and no Employee Code has been given,\n  reply: \"Hello, welcome to the Minori Labs Timesheet Agent. Please enter your Employee Code.\"\n  If the user's message already is an Employee Code (for example EMP-1001), go straight to step 2.\nStep 2 - Employee Code. When the user sends their code, reply exactly:\n  \"Thank you. Please enter your Password.\"\n  Never guess or invent an Employee Code.\nStep 3 - Password. You never see the password. The system checks it before you run and appends\n  the outcome to the user's message: \"[password provided] (verification result: ...)\".\n  Never claim someone is verified unless that result says ok.\n  Result ok: say \"Thank you, <emp_name> — you are verified for <project_name>.\" using the name and\n  project from the result, call list_activities, show the active activities as a numbered list\n  prefixed with \"There are N activities:\", and ask what they worked on and for how many hours.\n  Result invalid_credentials: \"Those details did not match. Please enter your Employee Code.\"\n  and go back to step 2. Never say which of the two was wrong.\n  Result credentials_required: \"Please enter your Employee Code.\" and go back to step 2.\n  Result sheet_access_denied or sheet_unavailable: use the reply given for it under RULES.\nStep 4 - Work. Extract ALL work items, activities, and hours mentioned in the user's message. If the user mentions multiple work items (e.g. 'worked ux for 3hrs andd backend for 2hrs' or '2h UX and 3h Backend'), YOU MUST EXTRACT EVERY SINGLE ITEM. Do NOT limit extraction to 1 item per message. Infer dates from words like today / yesterday (YYYY-MM-DD), defaulting to today. A short task description is optional; use what the user said.\nStep 5 - Confirm. BEFORE calling log_timesheet_entry, summarise ALL extracted entries together in ONE single confirmation prompt:\n  If 1 entry: \"Please confirm: <activity>, <hours> hours on <date>. Shall I save this entry? (yes/no)\"\n  If multiple entries: \"Please confirm: 1) <activity1>, <hours1> hours on <date1>; 2) <activity2>, <hours2> hours on <date2>. Shall I save these entries? (yes/no)\"\n  (add \", task: <description>\" after the date when there is one).\n  Only after the user responds yes, call log_timesheet_entry for EACH confirmed item sequentially until all are saved.\n  If they say no, ask what to change.\n  On ok:true reply: \"Thank you — your entries are saved for today.\" (name the date instead of \"today\" when it is not today), then ask whether there is anything else to log. Do not mention day totals, remaining hours or overtime: the system adds that line itself.\n\nRULES\n- Until the session is VERIFIED, call no tool and share no timesheet details; steer back to the\n  current step.\n- Once VERIFIED, never ask for the Employee Code or Password again unless a tool returns\n  invalid_credentials or credentials_required. A new greeting from a VERIFIED user goes to step 4.\n- For \"which project am I on\" use get_my_profile; for what is already logged use\n  read_my_entries (a row counts as logged only when its Entry ID is filled in). Never invent data.\n- log_timesheet_entry is the only thing that checks the daily cap and duplicates. Never decide\n  those yourself — call it and report what it returns.\n- Reason codes from log_timesheet_entry:\n  credentials_required: \"For security, please enter your Employee Code.\" then step 2.\n  invalid_credentials: \"Those details did not match. Please enter your Employee Code.\"\n  unknown_activity: name the valid activities listed in \"available\".\n  invalid_hours: \"Hours must be between 0 and 12.\"\n  invalid_date: ask for the date as YYYY-MM-DD.\n  daily_limit: say how many hours are already logged for that date (already_logged).\n  duplicate_entry: say that activity is already logged for that date, with the hours\n  (existing_hours), and ask whether they want to log a different activity.\n  sheet_access_denied: \"I don't have access to your timesheet yet — please ask your manager to share it.\"\n  sheet_unavailable: \"I couldn't reach your timesheet right now. Please try again in a moment.\"\n- If any other tool returns an error, say: \"I couldn't reach your timesheet right now. Please try again in a moment.\"\n- Never store, repeat, echo or confirm a password.\n- Keep replies to two or three sentences. Plain text. No emoji. No markdown, no tables.\n  Numbered lists only for the activity list.\n- If asked anything outside timesheets: \"I only handle timesheet logging for Minori Labs.\"\n  Then return to the current step.",
+          "maxIterations": 8,
+          "returnIntermediateSteps": true
+        }
+      },
+      "id": "ba5dd6fd-f3c1-a12d-cd67-ea444aeb51c9",
+      "name": "Timesheet Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1540,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-flash-latest",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "7eaea697-e91d-0f11-b354-16fa174741af",
+      "name": "Google Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1220,
+        560
+      ],
+      "credentials": {
+        "googlePalmApi": "Minori Gemini"
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-flash-lite-latest",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "ef424888-ab28-919c-ab6f-f5b45d97c5ee",
+      "name": "Google Gemini (Backup)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        560
+      ],
+      "credentials": {
+        "googlePalmApi": "Minori Gemini"
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Normalise Request').first().json.memoryKey }}",
+        "contextWindowLength": 10
+      },
+      "id": "6d8821b3-3e01-3f62-fc81-68842546fd7c",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1480,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Returns this employee's code, name and assigned project from their timesheet. No input.",
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Normalise Request').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Profile"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "specifyRangeA1",
+              "range": "A:D"
+            }
+          }
+        }
+      },
+      "id": "70a25e94-b6af-62ed-bc0a-52eadd26ca66",
+      "name": "get_my_profile",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        1620,
+        560
+      ],
+      "credentials": {
+        "googleApi": "Minori Sheets"
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Returns the activities available on this employee's project. No input.",
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Normalise Request').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Activities"
+        },
+        "options": {}
+      },
+      "id": "867877ae-bb0f-d8d9-8b9e-a20befb26335",
+      "name": "list_activities",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        1760,
+        560
+      ],
+      "credentials": {
+        "googleApi": "Minori Sheets"
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Returns rows already recorded in this employee's timesheet. No input; every row is returned, so filter by the Date column (YYYY-MM-DD) yourself when a date is asked about.",
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Normalise Request').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "TimeSheet"
+        },
+        "options": {}
+      },
+      "id": "7a5255dd-8555-8044-0cd4-d8397e6b40da",
+      "name": "read_my_entries",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        1900,
+        560
+      ],
+      "credentials": {
+        "googleApi": "Minori Sheets"
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "description": "Saves the confirmed entry: completes an existing blank row for the activity, or adds one, after checking hours, the daily cap and duplicates. Only call it when the session is VERIFIED and the user said yes to the summary. Requires activity_name, hours, work_date (the verified Employee Code is attached automatically). Optional task_description, comments. Returns ok:true or a reason code.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "MinoriTsLogEntry"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sheetId": "={{ $('Normalise Request').first().json.sheetId }}",
+            "password": "={{ $('Parse Credentials').first().json.password }}",
+            "mode": "log",
+            "verified_emp_code": "={{ $('Normalise Request').first().json.verifiedEmpCode }}",
+            "emp_code": "={{ $('Normalise Request').first().json.verifiedEmpCode || $('Parse Credentials').first().json.empCode }}",
+            "activity_name": "={{ $fromAI('activity_name', 'Activity to log, as the user said it, e.g. Client Meeting', 'string') }}",
+            "hours": "={{ $fromAI('hours', 'Hours worked, a number such as 6', 'number') }}",
+            "work_date": "={{ $fromAI('work_date', 'Work date as YYYY-MM-DD', 'string') }}",
+            "task_description": "={{ $fromAI('task_description', 'Short description of the work, or empty string', 'string') }}",
+            "comments": "={{ $fromAI('comments', 'Additional comments, or empty string', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sheetId",
+              "displayName": "sheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "emp_code",
+              "displayName": "emp_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "password",
+              "displayName": "password",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "activity_name",
+              "displayName": "activity_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "hours",
+              "displayName": "hours",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "work_date",
+              "displayName": "work_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "task_description",
+              "displayName": "task_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "comments",
+              "displayName": "comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "verified_emp_code",
+              "displayName": "verified_emp_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "8a34137a-95fd-09d1-427e-5ce4670914ef",
+      "name": "log_timesheet_entry",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2040,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8a85fb34-2d5c-9de9-bc26-00c227f61313",
+              "name": "event",
+              "value": "agent_error",
+              "type": "string"
+            },
+            {
+              "id": "82f82a60-c7c0-6c0d-61d3-1d1224cc5344",
+              "name": "sessionId",
+              "value": "={{ $('Normalise Request').first().json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "3c0ebc15-3380-bd19-5350-378b801d8e0c",
+              "name": "sheetId",
+              "value": "={{ $('Normalise Request').first().json.sheetId }}",
+              "type": "string"
+            },
+            {
+              "id": "50b80e13-5567-5446-f755-be2298c9f304",
+              "name": "error",
+              "value": "={{ typeof $json.error === 'string' ? $json.error : ($json.error?.message ?? 'unknown') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3c059b0-cbc3-6f28-02a5-3817b340563a",
+      "name": "Log Agent Failure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1800,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ade4cfe3-bab8-8e96-1645-de300ccf5093",
+              "name": "sessionId",
+              "value": "={{ $json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "16778c70-6db3-635e-855a-db312e889b61",
+              "name": "reply",
+              "value": "The assistant is unavailable right now, so nothing was saved. Please try again in a moment.",
+              "type": "string"
+            },
+            {
+              "id": "f45a440a-f843-82f8-9308-bd770c817e82",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "3fbe4f57-df67-8c2f-f018-338710068fff",
+              "name": "retryAfter",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f137ad0c-8098-63aa-7873-f0be96d3c124",
+      "name": "Agent Error Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2020,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rate limiter, response side: counts failed credential checks reported by\n// workflow B (never the agent's own judgement) and locks the key after 5 in 15 min.\n// Also keeps the per-session verification (30 min) and notes when the agent asked for the password.\nconst MAX_FAILS = 5;\nconst FAIL_WINDOW_MS = 15 * 60 * 1000;\nconst SESSION_MS = 30 * 60 * 1000;\n\nconst store = $getWorkflowStaticData('global');\nstore.rl = store.rl || {};\nstore.rl.fails = store.rl.fails || {};\nstore.auth = store.auth || {};\nstore.awaitPw = store.awaitPw || {};\n\nconst now = Date.now();\nconst req = $('Normalise Request').first().json;\nconst key = req.memoryKey;\nconst agent = $input.first().json;\nconst steps = Array.isArray(agent.intermediateSteps) ? agent.intermediateSteps : [];\n\n// Tool observations arrive as JSON strings, sometimes wrapped in [{...}] or {response: ...}.\nconst unwrap = (value) => {\n  let v = value;\n  for (let i = 0; i < 6; i++) {\n    if (typeof v === 'string') {\n      try { v = JSON.parse(v); } catch { return null; }\n    } else if (Array.isArray(v)) {\n      v = v[0];\n    } else if (v && typeof v === 'object' && !('ok' in v) && ('json' in v || 'response' in v)) {\n      v = v.json ?? v.response;\n    } else {\n      break;\n    }\n  }\n  return v && typeof v === 'object' && 'ok' in v ? v : null;\n};\n\nlet log = null;\nlet lastReason = '';\nconst outcomes = [];\n// Deterministic verification run before the agent (when a password was supplied this turn).\nif ($('Verify Credentials').isExecuted) {\n  const v = unwrap($('Verify Credentials').first().json);\n  if (v) outcomes.push({ result: v, code: String(v.emp_code ?? $('Parse Credentials').first().json.empCode ?? '').trim() });\n}\nfor (const step of steps) {\n  if (step?.action?.tool !== 'log_timesheet_entry') continue;\n  const result = unwrap(step.observation);\n  if (!result) continue;\n  log = result;\n  outcomes.push({ result, code: String(step.action.toolInput?.emp_code ?? req.verifiedEmpCode ?? '').trim() });\n}\nfor (const { result, code } of outcomes) {\n  lastReason = result.reason || '';\n  const failKey = req.sheetId + '|' + code;\n  if (result.reason === 'invalid_credentials') {\n    const f = (store.rl.fails[failKey] = store.rl.fails[failKey] || { times: [], lockedUntil: 0 });\n    f.times = f.times.filter((t) => now - t < FAIL_WINDOW_MS);\n    f.times.push(now);\n    if (f.times.length >= MAX_FAILS) f.lockedUntil = now + FAIL_WINDOW_MS;\n    delete store.auth[key];\n  } else if (result.reason === 'credentials_required') {\n    delete store.auth[key];\n  } else if (result.ok === true) {\n    delete store.rl.fails[failKey];\n    const empCode = String(result.emp_code ?? store.auth[key]?.empCode ?? code);\n    store.auth[key] = { empCode, until: now + SESSION_MS };\n  }\n}\n\nconst reply = String(agent.output ?? '').trim();\nif (/enter your password/i.test(reply)) {\n  // Remember the Employee Code from this turn's message; the next one-word reply is checked against it.\n  const code = /[A-Za-z]*-?\\d{3,}[A-Za-z0-9-]*/.exec(String(req.message ?? ''));\n  store.awaitPw[key] = { at: now, empCode: code ? code[0] : (store.awaitPw[key]?.empCode ?? '') };\n} else {\n  delete store.awaitPw[key];\n}\n\nreturn [{ json: { sessionId: req.sessionId, sheetId: req.sheetId, reply, log, lastReason } }];\n"
+      },
+      "id": "1de4ae6c-6ab9-003d-ee2f-6b991b513226",
+      "name": "Record Credential Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6366e26f-9ecf-134b-029d-38282fee08eb",
+              "leftValue": "={{ $json.log?.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "17513cdb-294a-fc20-a91b-2989532ccecc",
+      "name": "Entry Written?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2020,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "41279ef2-1543-4874-3e45-a677daf99b99",
+              "name": "followUp",
+              "type": "string",
+              "value": "={{ $json.log.day_total_hours === undefined ? '' : $json.log.day_total_hours < $json.log.standard_hours ? 'You have logged ' + $json.log.day_total_hours + ' of ' + $json.log.standard_hours + ' hours ' + ($json.log.work_date === $('Normalise Request').first().json.today ? 'today' : 'on ' + $json.log.work_date) + '. ' + ($json.log.remaining_hours + ($json.log.remaining_hours === 1 ? ' hour' : ' hours')) + ' remaining.' : $json.log.day_total_hours === $json.log.standard_hours ? 'You have completed your ' + $json.log.standard_hours + ' hours ' + ($json.log.work_date === $('Normalise Request').first().json.today ? 'today' : 'on ' + $json.log.work_date) + '.' : 'You have worked ' + $json.log.day_total_hours + ' hours ' + ($json.log.work_date === $('Normalise Request').first().json.today ? 'today' : 'on ' + $json.log.work_date) + ', which is ' + ($json.log.overtime_hours + ($json.log.overtime_hours === 1 ? ' hour' : ' hours')) + ' above the standard ' + $json.log.standard_hours + ' hours.' }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "1c09c398-d25a-ecd8-a641-a15a43dc3e8b",
+      "name": "Hours Follow-up",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2140,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"sessionId\": {{ JSON.stringify($json.sessionId) }},\n  \"reply\": {{ JSON.stringify(($json.reply || \"Thank you — verified. Your entry is completed for today. Have a good day!\") + ($json.followUp ? '\\n\\n' + $json.followUp : '')) }},\n  \"status\": \"ok\",\n  \"retryAfter\": 0,\n  \"entry\": {\n    \"entryId\": {{ JSON.stringify($json.log.entry_id) }},\n    \"rowNumber\": {{ Number($json.log.row_number) || null }},\n    \"action\": {{ JSON.stringify($json.log.action) }},\n    \"date\": {{ JSON.stringify($json.log.work_date) }},\n    \"hours\": {{ Number($json.log.hours) }},\n    \"activity\": {{ JSON.stringify($json.log.activity_name) }},\n    \"project\": {{ JSON.stringify($json.log.project_name) }},\n    \"dayTotalHours\": {{ Number($json.log.day_total_hours) || 0 }},\n    \"remainingHours\": {{ Number($json.log.remaining_hours) || 0 }},\n    \"overtimeHours\": {{ Number($json.log.overtime_hours) || 0 }}\n  }\n}",
+        "options": {}
+      },
+      "id": "120ffe5c-1cde-7d88-8bba-7ec316a3690a",
+      "name": "Reply With Entry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "464f067a-2ca5-e4cb-cb10-784f32bf69a4",
+              "name": "sessionId",
+              "value": "={{ $json.sessionId ?? $('Normalise Request').first().json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "554bebdc-ba24-7eb6-3add-50ae3dc6e46e",
+              "name": "reply",
+              "value": "={{ $json.log?.reason === 'sheet_access_denied' ? \"I don't have access to your timesheet yet — please ask your manager to share it.\" : ($json.log?.reason === 'sheet_unavailable' || !$json.reply) ? \"I couldn't reach your timesheet right now. Please try again in a moment.\" : $json.reply }}",
+              "type": "string"
+            },
+            {
+              "id": "08f7f137-8fbd-ce3f-3490-aadc976b87d9",
+              "name": "status",
+              "value": "={{ (['sheet_access_denied', 'sheet_unavailable'].includes($json.log?.reason) || !$json.reply) ? 'error' : /enter your password/i.test($json.reply) ? 'needs_credentials' : /enter your employee code|did not match/i.test($json.reply) ? 'needs_code' : 'ok' }}",
+              "type": "string"
+            },
+            {
+              "id": "3fbe4f57-df67-8c2f-f018-338710068fff",
+              "name": "retryAfter",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "44cdd7a4-8be6-5333-2763-79f82f46112d",
+      "name": "Reply Without Entry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "86adb2e0-0a7d-73d1-cf98-e1138d8b49ae",
+      "name": "Respond to Chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2640,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Chat Message": {
+      "main": [
+        [
+          {
+            "node": "Rate Limiter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limiter": {
+      "main": [
+        [
+          {
+            "node": "Throttled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Throttled?": {
+      "main": [
+        [
+          {
+            "node": "Throttled Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Sheet ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Sheet ID?": {
+      "main": [
+        [
+          {
+            "node": "Parse Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Missing Sheet Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Credentials": {
+      "main": [
+        [
+          {
+            "node": "Password Supplied?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Password Supplied?": {
+      "main": [
+        [
+          {
+            "node": "Verify Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Today in Kolkata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Credentials": {
+      "main": [
+        [
+          {
+            "node": "Today in Kolkata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Today in Kolkata": {
+      "main": [
+        [
+          {
+            "node": "Normalise Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Request": {
+      "main": [
+        [
+          {
+            "node": "Timesheet Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Timesheet Agent": {
+      "main": [
+        [
+          {
+            "node": "Record Credential Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Agent Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Agent Failure": {
+      "main": [
+        [
+          {
+            "node": "Agent Error Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Credential Outcome": {
+      "main": [
+        [
+          {
+            "node": "Entry Written?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entry Written?": {
+      "main": [
+        [
+          {
+            "node": "Hours Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Without Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hours Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Reply With Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Throttled Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Missing Sheet Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Error Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply With Entry": {
+      "main": [
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Without Entry": {
+      "main": [
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Timesheet Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini (Backup)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Timesheet Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Timesheet Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_my_profile": {
+      "ai_tool": [
+        [
+          {
+            "node": "Timesheet Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "list_activities": {
+      "ai_tool": [
+        [
+          {
+            "node": "Timesheet Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "read_my_entries": {
+      "ai_tool": [
+        [
+          {
+            "node": "Timesheet Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "log_timesheet_entry": {
+      "ai_tool": [
+        [
+          {
+            "node": "Timesheet Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": []
+}

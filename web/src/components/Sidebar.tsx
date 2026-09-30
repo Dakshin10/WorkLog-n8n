@@ -2,12 +2,12 @@ import React from 'react';
 import { MessageSquare, Calendar, ShieldCheck, LogOut, FileSpreadsheet } from 'lucide-react';
 import { UserRole } from '../types';
 
-export type TabType = 'chat' | 'timesheets' | 'audit' | 'sheets';
+export type TabType = 'chat' | 'timesheets' | 'sheets';
 
 interface SidebarProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
-  userRole: UserRole;
+  userRole?: UserRole;
   logCount: number;
   onResetSession?: () => void;
 }
@@ -36,11 +36,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Google Sheet Database',
       icon: FileSpreadsheet,
       badge: 'Synced'
-    },
-    {
-      id: 'audit' as TabType,
-      label: 'Audit & Security',
-      icon: ShieldCheck
     }
   ];
 
@@ -94,28 +89,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {onResetSession && (
         <button
           onClick={onResetSession}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-all cursor-pointer mt-1"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-all cursor-pointer mt-auto"
         >
           <LogOut className="w-3.5 h-3.5" /> Start New Login Session
         </button>
       )}
-
-      {/* Target Progress Card */}
-      <div className="mt-auto pt-4">
-        <div className="bg-zinc-900 p-4 rounded-lg border border-zinc-800">
-          <div className="flex items-center justify-between text-xs mb-2">
-            <span className="text-zinc-400 font-medium">Weekly Target</span>
-            <span className="font-mono font-bold text-white">21.5 / 40h</span>
-          </div>
-          <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-            <div className="h-full bg-white w-[54%] rounded-full"></div>
-          </div>
-          <p className="text-[10px] text-zinc-400 mt-2 flex items-center justify-between font-mono">
-            <span>54% Completed</span>
-            <span className="text-white font-semibold">On Track</span>
-          </p>
-        </div>
-      </div>
     </aside>
   );
 };

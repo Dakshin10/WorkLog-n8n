@@ -14,6 +14,8 @@ Use the credentials below to log into the interactive conversational chat assist
 | **`EMP-1002`** | **Alex Mercer** | `alex.mercer@minori.io` | `MANAGER` | AI Solutions Lab | **`123456`** |
 | **`EMP-1003`** | **Elena Rostova** | `elena.rostova@minori.io` | `HR_ADMIN` | Human Resources & Ops | **`990011`** |
 
+> Each employee's PIN is matched exactly — a random 6-digit number will be rejected. Use the PIN listed for that employee's code.
+
 ---
 
 ## 🚀 Quick Start Instructions

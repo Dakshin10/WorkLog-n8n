@@ -19,8 +19,30 @@ import {
   Clock
 } from 'lucide-react';
 
-const DEFAULT_SERVICE_ACCOUNT = 'worklog-sheets-sa@worklog-ai.iam.gserviceaccount.com';
-const DEFAULT_SHEET_ID = '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms';
+import { DEMO_USERS, INITIAL_TIMESHEETS, getStoredSheetId, getStoredSheetRawInput, setStoredSheetUrlOrId, extractSheetId, DEFAULT_SHEET_ID } from '../lib/api';
+
+const DEFAULT_SERVICE_ACCOUNT = '743944491549-compute@developer.gserviceaccount.com';
+
+// The last connection test survives switching views; it is only restored for the sheet it was run against.
+const TEST_RESULT_KEY = 'worklog_sheet_test_result';
+type TestResult = { success: boolean; message: string; timestamp?: string; latencyMs?: number };
+
+function loadTestResult(sheetId: string): TestResult | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TEST_RESULT_KEY) || 'null');
+    return saved && sheetId && saved.sheetId === sheetId ? saved.result : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTestResult(sheetId: string, result: TestResult) {
+  try {
+    localStorage.setItem(TEST_RESULT_KEY, JSON.stringify({ sheetId, result }));
+  } catch {
+    // Storage unavailable (private mode): the result just won't persist.
+  }
+}
 
 interface SheetTabInfo {
   id: string;
@@ -35,25 +57,20 @@ interface SheetTabInfo {
 }
 
 export const GoogleSheetsConnectView: React.FC = () => {
-  const [sheetInput, setSheetInput] = useState<string>(() => {
-    return localStorage.getItem('worklog_sheet_url_id') || DEFAULT_SHEET_ID;
-  });
+  // Show exactly what the user saved (URL or ID), even when it is the default sheet.
+  const [sheetInput, setSheetInput] = useState<string>(() => getStoredSheetRawInput());
   const [copiedSa, setCopiedSa] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<boolean>(false);
   const [copiedCsv, setCopiedCsv] = useState<boolean>(false);
-  const [activePreviewTab, setActivePreviewTab] = useState<string>('Employees');
+  const [copiedHeaders, setCopiedHeaders] = useState<boolean>(false);
+  const [activePreviewTab, setActivePreviewTab] = useState<string>('Timesheet');
   const [isTesting, setIsTesting] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
     timestamp?: string;
     latencyMs?: number;
-  } | null>({
-    success: true,
-    message: 'Connected to WorkLog AI Master Spreadsheet via n8n Service Account.',
-    timestamp: new Date().toLocaleTimeString(),
-    latencyMs: 142
-  });
+  } | null>(() => loadTestResult(extractSheetId(getStoredSheetRawInput())));
 
   // Extract pure Spreadsheet ID if user pasted full Google Sheets URL
   const extractedSheetId = React.useMemo(() => {
@@ -69,55 +86,48 @@ export const GoogleSheetsConnectView: React.FC = () => {
 
   const tabsInfo: SheetTabInfo[] = [
     {
+      id: 'Timesheet',
+      name: 'Timesheet',
+      description: 'Persisted timesheet logs matching spreadsheet schema.',
+      icon: Table,
+      required: true,
+      status: 'healthy',
+      rowCount: INITIAL_TIMESHEETS.length,
+      columns: ['Entry ID', 'Employee Code', 'Employee Name', 'Date', 'Project Name', 'Activity Type', 'Contributed Hours', 'Task Description', 'Additional Comments'],
+      sampleData: INITIAL_TIMESHEETS.map(e => ({
+        'Entry ID': e.entryId,
+        'Employee Code': e.employeeCode,
+        'Employee Name': e.employeeName,
+        'Date': e.workDate,
+        'Project Name': e.project,
+        'Activity Type': e.activity,
+        'Contributed Hours': `${e.hours} hrs`,
+        'Task Description': e.taskDescription,
+        'Additional Comments': e.additionalComments || ''
+      }))
+    },
+    {
       id: 'Employees',
       name: 'Employees',
       description: 'Master employee profiles, roles, departments, & hashed PIN passwords.',
       icon: Users,
       required: true,
       status: 'healthy',
-      rowCount: 3,
+      rowCount: DEMO_USERS.length,
       columns: ['Employee Code', 'Name', 'Email', 'Status', 'Projects', 'Timezone', 'Max Hours Per Day', 'PIN Hash', 'PIN Set At', 'Failed Attempts', 'Locked Until'],
-      sampleData: [
-        {
-          'Employee Code': 'EMP-1001',
-          'Name': 'Sarah Connor',
-          'Email': 'sarah.connor@minori.io',
-          'Status': 'ACTIVE',
-          'Projects': 'Client Portal Revamp, Internal AI Agents Track',
-          'Timezone': 'Asia/Kolkata',
-          'Max Hours Per Day': '16',
-          'PIN Hash': '8f92a10b4c89e21f...',
-          'PIN Set At': '2026-09-20T10:00:00Z',
-          'Failed Attempts': '0',
-          'Locked Until': ''
-        },
-        {
-          'Employee Code': 'EMP-1002',
-          'Name': 'Alex Mercer',
-          'Email': 'alex.mercer@minori.io',
-          'Status': 'ACTIVE',
-          'Projects': 'Internal AI Agents Track',
-          'Timezone': 'Asia/Kolkata',
-          'Max Hours Per Day': '16',
-          'PIN Hash': '3e41b99c1d02f88a...',
-          'PIN Set At': '2026-09-20T10:00:00Z',
-          'Failed Attempts': '0',
-          'Locked Until': ''
-        },
-        {
-          'Employee Code': 'EMP-1003',
-          'Name': 'Elena Rostova',
-          'Email': 'elena.rostova@minori.io',
-          'Status': 'ACTIVE',
-          'Projects': 'General Operations',
-          'Timezone': 'Asia/Kolkata',
-          'Max Hours Per Day': '16',
-          'PIN Hash': '9a11c882b411d30f...',
-          'PIN Set At': '2026-09-20T10:00:00Z',
-          'Failed Attempts': '0',
-          'Locked Until': ''
-        }
-      ]
+      sampleData: DEMO_USERS.map(u => ({
+        'Employee Code': u.code,
+        'Name': u.name,
+        'Email': u.email,
+        'Status': 'ACTIVE',
+        'Projects': u.projects.map(p => p.name).join(', '),
+        'Timezone': u.timezone,
+        'Max Hours Per Day': '16',
+        'PIN Hash': '8f92a10b4c89e21f...',
+        'PIN Set At': '2026-09-20T10:00:00Z',
+        'Failed Attempts': '0',
+        'Locked Until': ''
+      }))
     },
     {
       id: 'Catalog',
@@ -128,13 +138,16 @@ export const GoogleSheetsConnectView: React.FC = () => {
       status: 'healthy',
       rowCount: 8,
       columns: ['Project Name', 'Activity Type', 'Sort', 'Status'],
-      sampleData: [
-        { 'Project Name': 'Client Portal Revamp', 'Activity Type': 'Requirement Analysis', 'Sort': '1', 'Status': 'ACTIVE' },
-        { 'Project Name': 'Client Portal Revamp', 'Activity Type': 'Frontend UI Development', 'Sort': '2', 'Status': 'ACTIVE' },
-        { 'Project Name': 'Client Portal Revamp', 'Activity Type': 'API Integration', 'Sort': '3', 'Status': 'ACTIVE' },
-        { 'Project Name': 'Internal AI Agents Track', 'Activity Type': 'Workflow Orchestration', 'Sort': '1', 'Status': 'ACTIVE' },
-        { 'Project Name': 'Internal AI Agents Track', 'Activity Type': 'Prompt Engineering', 'Sort': '2', 'Status': 'ACTIVE' }
-      ]
+      sampleData: DEMO_USERS.flatMap((u, uIdx) =>
+        u.projects.flatMap((p, pIdx) =>
+          p.activities.map((a, aIdx) => ({
+            'Project Name': p.name,
+            'Activity Type': a,
+            'Sort': String(uIdx * 10 + pIdx * 5 + aIdx + 1),
+            'Status': 'ACTIVE'
+          }))
+        )
+      )
     },
     {
       id: 'Settings',
@@ -143,7 +156,7 @@ export const GoogleSheetsConnectView: React.FC = () => {
       icon: Settings,
       required: true,
       status: 'healthy',
-      rowCount: 12,
+      rowCount: 7,
       columns: ['Key', 'Value', 'Description'],
       sampleData: [
         { 'Key': 'AI_ENABLED', 'Value': 'true', 'Description': 'Enable Gemini NLP extraction engine' },
@@ -151,103 +164,7 @@ export const GoogleSheetsConnectView: React.FC = () => {
         { 'Key': 'MAX_HOURS_PER_ENTRY', 'Value': '12', 'Description': 'Maximum hours allowed per single log entry' },
         { 'Key': 'HOURS_STEP', 'Value': '0.25', 'Description': 'Quarter-hour step validation (0.25h)' },
         { 'Key': 'BACKDATE_DAYS', 'Value': '7', 'Description': 'Maximum allowed days to backdate entries' },
-        { 'Key': 'SESSION_TIMEOUT_MIN', 'Value': '30', 'Description': 'TTL for interactive chat state in minutes' },
-        { 'Key': 'PIN_MAX_ATTEMPTS', 'Value': '3', 'Description': 'Maximum failed PIN attempts before 15m lockout' }
-      ]
-    },
-    {
-      id: 'Timesheet',
-      name: 'Timesheet',
-      description: 'Persisted timesheet logs with verified UTC timestamps & entry IDs.',
-      icon: Table,
-      required: true,
-      status: 'healthy',
-      rowCount: 48,
-      columns: ['Entry ID', 'Employee Code', 'Date', 'Project Name', 'Activity Type', 'Contributed Hours', 'Task Description', 'Additional Comments', 'Logged At (UTC)', 'Verified At (UTC)', 'Channel', 'Session ID', 'Status', 'Supersedes', 'Prompt Version'],
-      sampleData: [
-        {
-          'Entry ID': 'WL-20260923-A8F12C',
-          'Employee Code': 'EMP-1001',
-          'Date': '2026-09-23',
-          'Project Name': 'Client Portal Revamp',
-          'Activity Type': 'Frontend UI Development',
-          'Contributed Hours': '6.5',
-          'Task Description': 'Designed glassmorphic dashboard layout with live chat thread and interactive timesheet grid.',
-          'Additional Comments': 'All component tests passing cleanly.',
-          'Logged At (UTC)': '2026-09-23T17:30:00Z',
-          'Verified At (UTC)': '2026-09-23T17:30:05Z',
-          'Channel': 'WEB_CHAT',
-          'Session ID': 'sess_99812',
-          'Status': 'LOGGED',
-          'Supersedes': '',
-          'Prompt Version': 'worklog-lite-extract-v1'
-        },
-        {
-          'Entry ID': 'WL-20260922-99B4D1',
-          'Employee Code': 'EMP-1001',
-          'Date': '2026-09-22',
-          'Project Name': 'Client Portal Revamp',
-          'Activity Type': 'API Integration',
-          'Contributed Hours': '7.0',
-          'Task Description': 'Connected n8n state machine webhook endpoints with React Query layer.',
-          'Additional Comments': 'Implemented offline fallback state.',
-          'Logged At (UTC)': '2026-09-22T18:00:00Z',
-          'Verified At (UTC)': '2026-09-22T18:00:04Z',
-          'Channel': 'WEB_CHAT',
-          'Session ID': 'sess_99741',
-          'Status': 'APPROVED',
-          'Supersedes': '',
-          'Prompt Version': 'worklog-lite-extract-v1'
-        }
-      ]
-    },
-    {
-      id: 'AuditLog',
-      name: 'AuditLog',
-      description: 'Security audit events, HMAC checks, & execution trace log.',
-      icon: ShieldCheck,
-      required: true,
-      status: 'healthy',
-      rowCount: 104,
-      columns: ['Event ID', 'Timestamp (UTC)', 'Employee Code', 'Event Type', 'Details', 'Session ID', 'Status'],
-      sampleData: [
-        {
-          'Event ID': 'aud_101',
-          'Timestamp (UTC)': '2026-09-23T17:30:05Z',
-          'Employee Code': 'EMP-1001',
-          'Event Type': 'CONFIRMED',
-          'Details': 'Entry WL-20260923-A8F12C logged 6.5 hrs to Client Portal Revamp',
-          'Session ID': 'sess_99812',
-          'Status': 'SUCCESS'
-        },
-        {
-          'Event ID': 'aud_102',
-          'Timestamp (UTC)': '2026-09-23T17:29:50Z',
-          'Employee Code': 'EMP-1001',
-          'Event Type': 'PIN_VERIFIED',
-          'Details': 'HMAC-SHA256 PIN check passed for EMP-1001',
-          'Session ID': 'sess_99812',
-          'Status': 'SUCCESS'
-        }
-      ]
-    },
-    {
-      id: 'Sessions',
-      name: 'Sessions',
-      description: 'State machine state storage for active chat sessions.',
-      icon: Clock,
-      required: false,
-      status: 'healthy',
-      rowCount: 5,
-      columns: ['Session ID', 'Stage', 'State JSON', 'Verified At', 'Updated At (UTC)'],
-      sampleData: [
-        {
-          'Session ID': 'sess_99812',
-          'Stage': 'COLLECT',
-          'State JSON': '{"employee":{"code":"EMP-1001"},"stage":"COLLECT"}',
-          'Verified At': '2026-09-23T17:29:50Z',
-          'Updated At (UTC)': '2026-09-23T17:30:05Z'
-        }
+        { 'Key': 'SESSION_TIMEOUT_MIN', 'Value': '30', 'Description': 'TTL for interactive chat state in minutes' }
       ]
     }
   ];
@@ -266,6 +183,27 @@ export const GoogleSheetsConnectView: React.FC = () => {
     setTimeout(() => setCopiedId(false), 2500);
   };
 
+  const handleCopyHeadersTsv = () => {
+    const tsvHeader = currentTabObj.columns.join('\t');
+    navigator.clipboard.writeText(tsvHeader);
+    setCopiedHeaders(true);
+    setTimeout(() => setCopiedHeaders(false), 2500);
+  };
+
+  const handleDownloadCsv = () => {
+    const cols = currentTabObj.columns.join(',');
+    const rows = currentTabObj.sampleData.map((r) => currentTabObj.columns.map((c) => `"${r[c] || ''}"`).join(',')).join('\n');
+    const csvContent = `data:text/csv;charset=utf-8,${encodeURIComponent(`${cols}\n${rows}`)}`;
+    const a = document.createElement('a');
+    a.href = csvContent;
+    a.download = `WorkLog_${currentTabObj.name}_Template.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setCopiedCsv(true);
+    setTimeout(() => setCopiedCsv(false), 2500);
+  };
+
   const handleCopyCsvData = () => {
     const cols = currentTabObj.columns.join(',');
     const rows = currentTabObj.sampleData.map((r) => currentTabObj.columns.map((c) => `"${r[c] || ''}"`).join(',')).join('\n');
@@ -281,21 +219,26 @@ export const GoogleSheetsConnectView: React.FC = () => {
     const startTime = Date.now();
 
     try {
-      localStorage.setItem('worklog_sheet_url_id', extractedSheetId);
+      // Keep the raw input (full URL or ID) so the box shows the same text when the view re-opens.
+      setStoredSheetUrlOrId(sheetInput);
       await new Promise((res) => setTimeout(res, 850));
 
       const latency = Date.now() - startTime;
-      setTestResult({
+      const result = {
         success: true,
         message: `Connection Verified! Read/Write access granted to Google Sheet (ID: ${extractedSheetId.slice(0, 8)}...).`,
         timestamp: new Date().toLocaleTimeString(),
         latencyMs: latency
-      });
+      };
+      setTestResult(result);
+      saveTestResult(extractedSheetId, result);
     } catch (err: any) {
-      setTestResult({
+      const result = {
         success: false,
         message: `Failed to connect: ${err.message || 'Check Service Account permissions on Google Sheet.'}`
-      });
+      };
+      setTestResult(result);
+      saveTestResult(extractedSheetId, result);
     } finally {
       setIsTesting(false);
     }
@@ -349,41 +292,123 @@ export const GoogleSheetsConnectView: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Spreadsheet URL or ID Input */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
-              <span>Google Sheet URL or Spreadsheet ID</span>
-              {extractedSheetId !== sheetInput && (
-                <span className="text-[10px] text-emerald-400 font-mono">ID Extracted Automatically</span>
+          {/* User-editable Google Sheet URL or ID Text Box */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-300 flex items-center gap-2">
+                <span>Enter Google Sheet URL to Link</span>
+              </label>
+              {extractedSheetId && (
+                <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  {extractedSheetId !== sheetInput ? 'URL Parsed Successfully' : 'Custom Sheet ID Set'}
+                </span>
               )}
-            </label>
-            <div className="relative">
+            </div>
+
+            <div className="relative flex items-center">
               <input
                 type="text"
                 value={sheetInput}
-                onChange={(e) => setSheetInput(e.target.value)}
-                placeholder="Paste Google Sheets URL or ID (e.g. 1BxiMVs0XRA5...)"
-                className="w-full bg-zinc-950 border border-zinc-800 focus:border-white rounded-lg px-3.5 py-2.5 text-xs text-white font-mono placeholder:text-zinc-600 focus:outline-none transition-all pr-10"
+                onChange={(e) => {
+                  setSheetInput(e.target.value);
+                  setStoredSheetUrlOrId(e.target.value);
+                }}
+                placeholder="Paste full Google Sheet URL (e.g. https://docs.google.com/spreadsheets/d/...)"
+                className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-500 rounded-lg pl-3.5 pr-20 py-2.5 text-xs text-white font-mono placeholder:text-zinc-600 focus:outline-none transition-all"
               />
-              <button
-                onClick={handleCopySheetId}
-                className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                title="Copy Clean Sheet ID"
-              >
-                {copiedId ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-              </button>
+              <div className="absolute right-2 flex items-center gap-1 text-zinc-400">
+                {sheetInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSheetInput('');
+                      setStoredSheetUrlOrId('');
+                    }}
+                    className="p-1 hover:text-white transition-colors cursor-pointer text-zinc-500 hover:text-zinc-300"
+                    title="Clear text box"
+                  >
+                    <Eye className="w-3.5 h-3.5 hidden" />
+                    <span className="text-[11px] font-mono px-1 font-bold">✕</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCopySheetId}
+                  className="p-1 hover:text-white transition-colors cursor-pointer"
+                  title="Copy Clean Sheet ID"
+                >
+                  {copiedId ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-            <p className="text-[11px] text-zinc-400">
-              Clean Sheet ID: <code className="text-zinc-200 font-mono">{extractedSheetId}</code>
-            </p>
+
+            {/* Quick Actions & Example */}
+            <div className="flex items-center justify-between text-[11px] text-zinc-400">
+              <div className="flex items-center gap-1 text-zinc-500 font-mono truncate">
+                <span>Sample URL:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sample = 'https://docs.google.com/spreadsheets/d/1sv08dlnTzV6tV6ECd60Od81zkDuemBocjibmOUghhqk/edit?gid=0#gid=0';
+                    setSheetInput(sample);
+                    setStoredSheetUrlOrId(sample);
+                  }}
+                  className="text-emerald-400 hover:underline font-mono truncate cursor-pointer text-left"
+                  title="Click to paste demo spreadsheet URL"
+                >
+                  Load Sample Sheet URL ↗
+                </button>
+              </div>
+            </div>
+
+            {/* Extracted Clean ID & Target URL Card */}
+            <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-lg p-3 space-y-2 text-xs font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400 text-[11px]">Linked Clean Sheet ID:</span>
+                <div className="flex items-center gap-1.5">
+                  <code className="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[11px]">
+                    {extractedSheetId || 'No Sheet URL Entered'}
+                  </code>
+                  {extractedSheetId && (
+                    <button
+                      type="button"
+                      onClick={handleCopySheetId}
+                      className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition-colors"
+                      title="Copy Clean Sheet ID"
+                    >
+                      {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {extractedSheetId && (
+                <div className="flex items-center justify-between text-[11px] pt-2 border-t border-zinc-900 gap-2">
+                  <span className="text-zinc-400 shrink-0">Full Target URL:</span>
+                  <a
+                    href={googleSheetsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-300 hover:text-emerald-400 underline truncate flex items-center gap-1"
+                  >
+                    <span className="truncate">{googleSheetsUrl}?gid=0#gid=0</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Service Account Email Card */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
-              <span>Service Account Email (Share as Editor)</span>
-              <span className="text-[10px] font-mono text-amber-400">Permission: Editor</span>
-            </label>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-300">
+                Service Account Email (Share as Editor)
+              </label>
+              <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                Permission: Editor
+              </span>
+            </div>
             <div className="relative">
               <input
                 type="text"
@@ -464,6 +489,61 @@ export const GoogleSheetsConnectView: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Blank Google Sheet Quick Setup Banner */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3 relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+              <Table className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white font-heading flex items-center gap-2">
+                Setting Up a Blank Google Sheet?
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-normal">
+                  Quick Header Setup
+                </span>
+              </h4>
+              <p className="text-xs text-zinc-400 mt-1">
+                To link a new spreadsheet, copy the column header row below, click cell <code className="text-emerald-400 font-bold">A1</code> in Google Sheets, and press <code className="text-white font-mono bg-zinc-800 px-1 rounded">Ctrl + V</code>.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleCopyHeadersTsv}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-500 text-black font-semibold text-xs hover:bg-emerald-400 transition-all cursor-pointer shadow-sm"
+              title="Copy tab-separated headers to paste into cell A1"
+            >
+              {copiedHeaders ? <Check className="w-4 h-4 text-black" /> : <Copy className="w-4 h-4 text-black" />}
+              <span>{copiedHeaders ? 'Headers Copied!' : `📋 Copy ${activePreviewTab} Headers`}</span>
+            </button>
+
+            <button
+              onClick={handleDownloadCsv}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-800 text-white font-medium text-xs hover:bg-zinc-700 border border-zinc-700 transition-all cursor-pointer"
+              title="Download CSV template file"
+            >
+              <Download className="w-4 h-4 text-emerald-400" />
+              <span>Download CSV</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Live Headers Preview Strip */}
+        <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 text-xs font-mono flex items-center gap-2 overflow-x-auto">
+          <span className="text-zinc-500 text-[10px] shrink-0 uppercase tracking-wider font-bold">Headers to Paste:</span>
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {currentTabObj.columns.map((col, idx) => (
+              <span key={col} className="px-2 py-1 rounded bg-zinc-900 border border-zinc-800 text-emerald-400 whitespace-nowrap text-[11px]">
+                <span className="text-zinc-600 text-[9px] mr-1">{String.fromCharCode(65 + idx)}:</span>
+                {col}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Mandatory Sheet Tabs & Live Schema Previewer */}

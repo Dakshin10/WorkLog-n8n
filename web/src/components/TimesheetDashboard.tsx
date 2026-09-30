@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TimesheetEntry, UserProfile } from '../types';
+import { TimesheetEntry, UserProfile, TIMESHEET_COLUMN_DEFS } from '../types';
 import { Calendar as CalendarIcon, Clock, CheckCircle, Download, Plus, Filter, Search, FileText, User } from 'lucide-react';
 
 interface TimesheetDashboardProps {
@@ -17,12 +17,20 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // New entry form state
+  // Dynamic project & activity options derived directly from currentUser profile
+  const availableProjects = currentUser.projects && currentUser.projects.length > 0
+    ? currentUser.projects
+    : [{ id: 'default', code: 'PRJ-GEN', name: 'General Work', activities: ['General Operations', 'Documentation', 'Meeting'] }];
+
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
-  const [newProject, setNewProject] = useState('Client Portal Revamp');
-  const [newActivity, setNewActivity] = useState('Frontend UI Development');
-  const [newHours, setNewHours] = useState('6.5');
+  const [newProject, setNewProject] = useState<string>(() => availableProjects[0]?.name || '');
+
+  const currentProjObj = availableProjects.find(p => p.name === newProject) || availableProjects[0];
+  const availableActivities = currentProjObj?.activities || [];
+  const [newActivity, setNewActivity] = useState<string>(() => availableActivities[0] || '');
+  const [newHours, setNewHours] = useState('4.0');
   const [newDesc, setNewDesc] = useState('');
+  const [newComments, setNewComments] = useState('');
 
   const filteredEntries = entries.filter((item) => {
     const matchesSearch =
@@ -37,18 +45,16 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
   const targetHours = 40.0;
   const progressPct = Math.min(100, Math.round((totalHours / targetHours) * 100));
 
+  // Dynamic CSV Export using column definitions schema
   const handleExportCsv = () => {
-    const headers = ['Entry ID', 'Employee Code', 'Date', 'Project', 'Activity', 'Hours', 'Status', 'Description'];
-    const rows = entries.map(e => [
-      e.entryId,
-      e.employeeCode,
-      e.workDate,
-      `"${e.project}"`,
-      `"${e.activity}"`,
-      e.hours,
-      e.status,
-      `"${e.taskDescription.replace(/"/g, '""')}"`
-    ]);
+    const headers = TIMESHEET_COLUMN_DEFS.map(col => col.label);
+    const rows = entries.map(e =>
+      TIMESHEET_COLUMN_DEFS.map(col => {
+        const val = e[col.key] ?? '';
+        const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+        return `"${strVal.replace(/"/g, '""')}"`;
+      })
+    );
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -68,9 +74,10 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
       employeeName: currentUser.name,
       workDate: newDate,
       project: newProject,
-      activity: newActivity,
+      activity: newActivity || 'General Operations',
       hours: parseFloat(newHours) || 4.0,
       taskDescription: newDesc || 'Manual timesheet entry',
+      additionalComments: newComments || '',
       status: 'LOGGED',
       createdAt: new Date().toISOString(),
       verifiedAt: new Date().toISOString()
@@ -78,6 +85,7 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
     onAddEntry(entry);
     setShowAddModal(false);
     setNewDesc('');
+    setNewComments('');
   };
 
   return (
@@ -174,7 +182,7 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
         </div>
       </div>
 
-      {/* Timesheet Data Table */}
+      {/* Dynamic Timesheet Data Table generated from TIMESHEET_COLUMN_DEFS */}
       <div className="bg-zinc-950 rounded-lg border border-zinc-800 overflow-hidden shadow-sm">
         <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
           <h3 className="text-sm font-heading font-bold text-white flex items-center gap-2">
@@ -185,42 +193,81 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-black text-zinc-400 font-mono uppercase text-[10px] tracking-wider border-b border-zinc-800">
+        <div className="overflow-x-auto border-t border-zinc-800">
+          <table className="w-full text-left text-xs border-collapse">
+            {/* Dynamic Headers from TIMESHEET_COLUMN_DEFS */}
+            <thead className="bg-black text-white font-bold text-xs tracking-wide border-b border-zinc-800">
               <tr>
-                <th className="px-6 py-3">Entry ID</th>
-                <th className="px-6 py-3">Date</th>
-                <th className="px-6 py-3">Project & Activity</th>
-                <th className="px-6 py-3">Hours</th>
-                <th className="px-6 py-3">Task Description</th>
-                <th className="px-6 py-3">Status</th>
+                {TIMESHEET_COLUMN_DEFS.map((col, idx) => (
+                  <th
+                    key={String(col.key)}
+                    className={`px-4 py-3 border-zinc-800/60 whitespace-nowrap ${
+                      idx < TIMESHEET_COLUMN_DEFS.length - 1 ? 'border-r' : ''
+                    }`}
+                  >
+                    {col.label}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800 font-sans">
+
+            {/* Dynamic Data Rows from TIMESHEET_COLUMN_DEFS */}
+            <tbody className="divide-y divide-zinc-800/60 font-sans text-slate-200">
               {filteredEntries.map((e) => (
                 <tr key={e.entryId} className="hover:bg-zinc-900/60 transition-colors">
-                  <td className="px-6 py-4 font-mono text-[11px] text-white font-medium">
-                    {e.entryId}
-                  </td>
-                  <td className="px-6 py-4 font-mono text-zinc-300 whitespace-nowrap">
-                    {e.workDate}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="font-semibold text-white">{e.project}</div>
-                    <div className="text-[11px] text-zinc-400 mt-0.5">{e.activity}</div>
-                  </td>
-                  <td className="px-6 py-4 font-mono font-bold text-white text-sm whitespace-nowrap">
-                    {e.hours} hrs
-                  </td>
-                  <td className="px-6 py-4 max-w-xs text-zinc-300">
-                    <p className="line-clamp-2">{e.taskDescription}</p>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2.5 py-1 rounded text-[10px] font-mono font-bold tracking-wider uppercase border bg-zinc-900 text-zinc-300 border-zinc-700">
-                      {e.status}
-                    </span>
-                  </td>
+                  {TIMESHEET_COLUMN_DEFS.map((col, idx) => {
+                    const rawVal = e[col.key];
+                    const isLast = idx === TIMESHEET_COLUMN_DEFS.length - 1;
+                    const cellBorder = isLast ? '' : 'border-r border-zinc-800/60';
+
+                    if (col.key === 'entryId') {
+                      return (
+                        <td key={col.key} className={`px-4 py-3 font-mono text-[11px] text-white font-semibold whitespace-nowrap ${cellBorder}`}>
+                          {rawVal ? String(rawVal) : ''}
+                        </td>
+                      );
+                    }
+                    if (col.key === 'employeeCode' || col.key === 'workDate') {
+                      return (
+                        <td key={col.key} className={`px-4 py-3 font-mono text-zinc-300 whitespace-nowrap ${cellBorder}`}>
+                          {rawVal ? String(rawVal) : ''}
+                        </td>
+                      );
+                    }
+                    if (col.key === 'employeeName' || col.key === 'project') {
+                      return (
+                        <td key={col.key} className={`px-4 py-3 text-white font-semibold whitespace-nowrap ${cellBorder}`}>
+                          {rawVal ? String(rawVal) : ''}
+                        </td>
+                      );
+                    }
+                    if (col.key === 'activity') {
+                      return (
+                        <td key={col.key} className={`px-4 py-3 text-emerald-400 font-medium whitespace-nowrap ${cellBorder}`}>
+                          {rawVal ? String(rawVal) : ''}
+                        </td>
+                      );
+                    }
+                    if (col.key === 'hours') {
+                      return (
+                        <td key={col.key} className={`px-4 py-3 font-mono font-bold text-white text-xs whitespace-nowrap ${cellBorder}`}>
+                          {rawVal && Number(rawVal) > 0 ? `${rawVal} hrs` : ''}
+                        </td>
+                      );
+                    }
+                    if (col.key === 'taskDescription' || col.key === 'additionalComments') {
+                      return (
+                        <td key={col.key} className={`px-4 py-3 max-w-xs text-zinc-300 ${cellBorder}`}>
+                          <p className="line-clamp-2">{rawVal ? String(rawVal) : ''}</p>
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={col.key} className={`px-4 py-3 text-zinc-300 ${cellBorder}`}>
+                        {rawVal ? String(rawVal) : ''}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -228,7 +275,7 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
         </div>
       </div>
 
-      {/* Add Entry Modal */}
+      {/* Dynamic Add Entry Modal driven by user profile projects catalog */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
           <form onSubmit={handleCreateManual} className="bg-zinc-950 max-w-md w-full p-6 rounded-lg border border-zinc-800 space-y-4">
@@ -248,26 +295,53 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
             </div>
 
             <div>
-              <label className="text-xs text-zinc-400 block mb-1">Project</label>
+              <label className="text-xs text-zinc-400 block mb-1">Project Name</label>
               <select
                 value={newProject}
-                onChange={(e) => setNewProject(e.target.value)}
-                className="w-full bg-black border border-zinc-800 text-white px-3 py-2 rounded text-xs focus:outline-none focus:border-white"
+                onChange={(e) => {
+                  const selectedName = e.target.value;
+                  setNewProject(selectedName);
+                  const projObj = availableProjects.find(p => p.name === selectedName);
+                  if (projObj && projObj.activities.length > 0) {
+                    setNewActivity(projObj.activities[0]);
+                  } else {
+                    setNewActivity('');
+                  }
+                }}
+                className="w-full bg-black border border-zinc-800 text-white px-3 py-2 rounded text-xs focus:outline-none focus:border-white cursor-pointer font-medium"
               >
-                <option value="Client Portal Revamp">Client Portal Revamp</option>
-                <option value="Internal AI Agents Track">Internal AI Agents Track</option>
+                {availableProjects.map((p) => (
+                  <option key={p.id || p.code || p.name} value={p.name}>
+                    {p.name} ({p.code || 'PRJ'})
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
-              <label className="text-xs text-zinc-400 block mb-1">Activity</label>
-              <input
-                type="text"
-                value={newActivity}
-                onChange={(e) => setNewActivity(e.target.value)}
-                className="w-full bg-black border border-zinc-800 text-white px-3 py-2 rounded text-xs focus:outline-none focus:border-white"
-                required
-              />
+              <label className="text-xs text-zinc-400 block mb-1">Activity Type</label>
+              {availableActivities.length > 0 ? (
+                <select
+                  value={newActivity}
+                  onChange={(e) => setNewActivity(e.target.value)}
+                  className="w-full bg-black border border-zinc-800 text-white px-3 py-2 rounded text-xs focus:outline-none focus:border-white cursor-pointer font-medium"
+                >
+                  {availableActivities.map((act) => (
+                    <option key={act} value={act}>
+                      {act}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={newActivity}
+                  onChange={(e) => setNewActivity(e.target.value)}
+                  placeholder="Enter activity type..."
+                  className="w-full bg-black border border-zinc-800 text-white px-3 py-2 rounded text-xs focus:outline-none focus:border-white"
+                  required
+                />
+              )}
             </div>
 
             <div>
@@ -294,6 +368,17 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
               />
             </div>
 
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Additional Comments (Optional)</label>
+              <input
+                type="text"
+                value={newComments}
+                onChange={(e) => setNewComments(e.target.value)}
+                placeholder="Optional notes or comments..."
+                className="w-full bg-black border border-zinc-800 text-white px-3 py-2 rounded text-xs focus:outline-none focus:border-white"
+              />
+            </div>
+
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
@@ -304,7 +389,7 @@ export const TimesheetDashboard: React.FC<TimesheetDashboardProps> = ({
               </button>
               <button
                 type="submit"
-                className="flex-1 py-2 rounded bg-white text-black text-xs font-semibold transition-all cursor-pointer"
+                className="flex-1 py-2 rounded bg-white text-black text-xs font-semibold transition-all cursor-pointer shadow-sm"
               >
                 Save Entry
               </button>

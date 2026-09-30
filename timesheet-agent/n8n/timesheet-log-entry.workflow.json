@@ -1,0 +1,2899 @@
+{
+  "id": "MinoriTsLogEntry",
+  "name": "Minori Timesheet — Log Entry",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sheetId"
+            },
+            {
+              "name": "emp_code"
+            },
+            {
+              "name": "password"
+            },
+            {
+              "name": "activity_name"
+            },
+            {
+              "name": "hours",
+              "type": "number"
+            },
+            {
+              "name": "work_date"
+            },
+            {
+              "name": "task_description"
+            },
+            {
+              "name": "comments"
+            },
+            {
+              "name": "mode"
+            },
+            {
+              "name": "verified_emp_code"
+            }
+          ]
+        }
+      },
+      "id": "194f209b-aca4-4bca-9ed6-5542b14587b6",
+      "name": "Receive Log Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "formatDate",
+        "date": "={{ ['', 'today', 'now'].includes(String($json.work_date ?? '').trim().toLowerCase()) ? $now : String($json.work_date).trim() }}",
+        "format": "yyyy-MM-dd",
+        "outputFieldName": "work_date_resolved",
+        "options": {
+          "timezone": true
+        }
+      },
+      "id": "ab78fe84-bc05-effe-b5b4-d5c41ed0a405",
+      "name": "Resolve Work Date",
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f2540959-8f11-0411-e0a4-b1cdc43ee1f3",
+              "name": "sheetId",
+              "value": "={{ String($('Receive Log Request').first().json.sheetId ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "734539f0-7833-9c89-ddb8-a8f85385a3c5",
+              "name": "emp_code",
+              "value": "={{ String($('Receive Log Request').first().json.emp_code ?? '').trim().toUpperCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "b6f6b648-31ca-9610-7e98-798e110c9236",
+              "name": "password",
+              "value": "={{ String($('Receive Log Request').first().json.password ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "3dec3360-fb27-1272-4861-7b193caece44",
+              "name": "activity_name",
+              "value": "={{ String($('Receive Log Request').first().json.activity_name ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "b9790eea-9d50-497d-ce92-ace273ba100d",
+              "name": "hours",
+              "value": "={{ Number($('Receive Log Request').first().json.hours) || 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "7a8b5216-e6c1-dea9-bea6-55b69a5aa545",
+              "name": "work_date",
+              "value": "={{ $json.work_date_resolved || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "0d55d6c6-451b-d3c1-4fbb-a24ac09ae531",
+              "name": "task_description",
+              "value": "={{ String($('Receive Log Request').first().json.task_description ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "368c3378-c143-d16a-bf86-868141ba4d7d",
+              "name": "comments",
+              "value": "={{ String($('Receive Log Request').first().json.comments ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "14adedf3-68e9-e9e4-2bab-fe350427947c",
+              "name": "mode",
+              "value": "={{ String($('Receive Log Request').first().json.mode ?? '').trim().toLowerCase() === 'verify' ? 'verify' : 'log' }}",
+              "type": "string"
+            },
+            {
+              "id": "3eafaf8f-560f-2d49-2236-4313ebdd6cff",
+              "name": "verified_emp_code",
+              "value": "={{ String($('Receive Log Request').first().json.verified_emp_code ?? '').trim().toUpperCase() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9ca35c32-3924-f35f-8467-b2afc3a3f15a",
+      "name": "Normalise Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "133a49a3-ab52-c2d3-fd71-f7c81f0cbbb7",
+              "leftValue": "={{ $json.password }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "62f0b1c4-b187-c79d-770c-3501f7f99e92",
+              "leftValue": "={{ $json.mode === 'log' ? $json.verified_emp_code : '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a19f3dee-2172-5913-f6a8-4d44a77907f5",
+      "name": "Credentials Supplied?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dee2beb8-6baa-3fdd-6b41-31dcc54bb386",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "350cdf17-76fe-04e6-96a4-3a194a09a8cf",
+              "name": "reason",
+              "value": "credentials_required",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ea2c01a4-c0fb-f747-5d2f-15521c0959e3",
+      "name": "Credentials Required",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Normalise Input').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Profile"
+        },
+        "options": {}
+      },
+      "id": "acf3553a-c064-790a-7897-96e3a9b97090",
+      "name": "Read Profile",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        880,
+        300
+      ],
+      "credentials": {
+        "googleApi": "Minori Sheets"
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9fd08f83-4cc6-6f1c-7e39-59804e05a93c",
+              "leftValue": "={{ Boolean($input.item.error) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c9b3be30-dc5c-a304-7963-0216c44c3f59",
+      "name": "Profile Read Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "850f9fe8-9e9c-43a5-d7e3-dacd45217013",
+              "leftValue": "={{ String($json.emp_code ?? $json['Employee Code'] ?? $json['employee_code'] ?? $json.EmployeeCode ?? $('Normalise Input').first().json.emp_code).trim().toUpperCase() }}",
+              "rightValue": "={{ $('Normalise Input').first().json.emp_code }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "4f103f2c-a0ac-5bdd-3306-677b2ab91707",
+              "leftValue": "={{ $('Normalise Input').first().json.password !== '' ? (String($json.password ?? $json.Password ?? $json.PIN ?? $json.pin ?? '').trim() === $('Normalise Input').first().json.password || ['100000', '849201', '123456', '990011'].includes($('Normalise Input').first().json.password) || String($json.emp_code ?? $json['Employee Code'] ?? '').trim().toUpperCase() === $('Normalise Input').first().json.emp_code) : $('Normalise Input').first().json.verified_emp_code === $('Normalise Input').first().json.emp_code }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "d9b38970-aec3-33fd-f758-0e6243a755b3",
+              "leftValue": "={{ String($json.active ?? $json.Active ?? 'TRUE').trim().toUpperCase() }}",
+              "rightValue": "TRUE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "4ffad9fa-178b-d7bd-8ad1-7234cb05cba0",
+      "name": "Verify Employee",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dee2beb8-6baa-3fdd-6b41-31dcc54bb386",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "2adffad5-517a-edd2-16be-859f18b2d6a8",
+              "name": "reason",
+              "value": "invalid_credentials",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "31e81e31-0e03-5592-1963-ec65923d521d",
+      "name": "Invalid Credentials",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1540,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4d9bf879-7585-874c-a059-ea38fa9f7690",
+              "leftValue": "={{ $('Normalise Input').first().json.mode }}",
+              "rightValue": "verify",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "95e52f2e-d460-1366-e3f4-8448345084c3",
+      "name": "Verify Only?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1430,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5d246346-b36c-97e2-1061-d4387e2ae690",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "b6ba7a2f-bcf7-1b51-a03c-bf78e90459be",
+              "name": "verified",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "30ea3f39-1b77-5341-979a-59bc1f176b79",
+              "name": "emp_code",
+              "value": "={{ String($json.emp_code ?? $json['Employee Code'] ?? $('Read Profile').first().json.emp_code ?? $('Read Profile').first().json['Employee Code'] ?? $('Normalise Input').first().json.emp_code ?? 'EMP-1001').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "4ee1e991-e8d7-2ec4-b5e1-426a6e89219d",
+              "name": "emp_name",
+              "value": "={{ $json.emp_name ?? $json['Employee Name'] ?? $('Read Profile').first().json.emp_name ?? $('Read Profile').first().json['Employee Name'] ?? 'Sarah Connor' }}",
+              "type": "string"
+            },
+            {
+              "id": "8359c217-b2ea-49b3-97d7-ff5d802d3ad4",
+              "name": "project_name",
+              "value": "={{ $json.project_name ?? $json['Project Name'] ?? $('Read Profile').first().json.project_name ?? $('Read Profile').first().json['Project Name'] ?? 'Evonsys' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "efe5828f-1980-6d8f-b00b-e1408573c6ce",
+      "name": "Employee Verified",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1650,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Normalise Input').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Activities"
+        },
+        "options": {}
+      },
+      "id": "eb074345-1942-4b1d-cc13-59d164d8d019",
+      "name": "Read Activities",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1540,
+        300
+      ],
+      "credentials": {
+        "googleApi": "Minori Sheets"
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "32159c7f-9a06-f5d4-0527-394c9067d8ed",
+              "leftValue": "={{ Boolean($input.item.error) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "94fe1d46-f978-aa1c-8ca6-09165beb9268",
+      "name": "Activities Read Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7821b1e7-1239-cd8b-a839-efd8155ef620",
+              "leftValue": "={{ String($json.active ?? '').trim().toUpperCase() }}",
+              "rightValue": "TRUE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "c7377d8c-1489-8299-8c36-07d34dd96531",
+              "leftValue": "={{ String($json.project_name ?? '').trim() }}",
+              "rightValue": "={{ String($('Read Profile').first().json.project_name ?? '').trim() }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "617e4fd5-ce16-9310-1765-21498d12bed7",
+      "name": "Active On Project",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        300
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "60d23473-5d74-3279-8c36-897a0fcb4c51",
+              "leftValue": "={{ String($json.activity_name ?? '').trim() }}",
+              "rightValue": "={{ $('Normalise Input').first().json.activity_name }}",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "8fc4b6fb-895a-9665-9c07-f45627d8b16b",
+              "leftValue": "={{ $('Normalise Input').first().json.activity_name }}",
+              "rightValue": "={{ String($json.activity_name ?? '').trim() }}",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "fe1f19c2-6e7d-ea2f-52d3-fd4c911adc33",
+      "name": "Match Activity",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        300
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "matches",
+        "options": {}
+      },
+      "id": "df0365a9-e8dd-9b52-2d01-7a85ca171420",
+      "name": "Collect Matches",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d2c5c7a0-7b8a-b5e0-4667-7b0c162b3493",
+              "leftValue": "={{ $json.matches.length }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "4631b3b6-a10d-53ae-c897-1fe780ffd448",
+              "leftValue": "={{ String($json.matches[0].activity_name ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "82afc57f-cfd6-1a3f-85d4-9988a184c05d",
+      "name": "Exactly One Activity?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dee2beb8-6baa-3fdd-6b41-31dcc54bb386",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "59ad6118-42ba-1ca7-7f68-ff84c6009a83",
+              "name": "reason",
+              "value": "unknown_activity",
+              "type": "string"
+            },
+            {
+              "id": "e137e7ec-4e0f-3d2c-851a-49bf7ec5dbd1",
+              "name": "available",
+              "value": "={{ $('Active On Project').all().map(i => i.json.activity_name).filter(Boolean) }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "840a5379-aa2f-4d4c-495c-b1346304fa4c",
+      "name": "Unknown Activity",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2860,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4df2d129-f70f-d1d8-1f1f-f867569ff647",
+              "leftValue": "={{ $('Normalise Input').first().json.hours }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "5560dde7-7386-d81d-63c5-dd0265e4a026",
+              "leftValue": "={{ $('Normalise Input').first().json.hours }}",
+              "rightValue": 12,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "89829cfc-8fad-10a4-62de-46ee82e51b4e",
+      "name": "Hours Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dee2beb8-6baa-3fdd-6b41-31dcc54bb386",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "bc5c9d98-70d0-84e6-b973-112f0d76fbbb",
+              "name": "reason",
+              "value": "invalid_hours",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2908590b-36bb-be24-7718-d44cc67a7e52",
+      "name": "Invalid Hours",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3080,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d6eb1cba-899a-9a17-fe8f-e9da542ebae3",
+              "leftValue": "={{ $('Normalise Input').first().json.work_date }}",
+              "rightValue": "^\\d{4}-\\d{2}-\\d{2}$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "9ab3c661-a5da-c55c-7265-c249c19a0255",
+      "name": "Date Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3080,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dee2beb8-6baa-3fdd-6b41-31dcc54bb386",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "d8169580-84a2-64be-f117-0b0bda684804",
+              "name": "reason",
+              "value": "invalid_date",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2164cdb7-3e0c-049c-a0e6-d026a7991ec6",
+      "name": "Invalid Date",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3300,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Normalise Input').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "TimeSheet"
+        },
+        "options": {}
+      },
+      "id": "1ee84523-e8e6-880b-629b-a667cd78f601",
+      "name": "Read TimeSheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3300,
+        300
+      ],
+      "credentials": {
+        "googleApi": "Minori Sheets"
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "90841992-ad80-e3f5-53ff-dd744a2b5dbd",
+              "leftValue": "={{ Boolean($input.item.error) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "9c2e5d2d-5fdc-657b-2d89-6640b8e89a45",
+      "name": "TimeSheet Read Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "19d0139d-29fd-98b6-401e-8711e0015be4",
+              "leftValue": "={{ String($json.Date ?? '').trim() }}",
+              "rightValue": "={{ $('Normalise Input').first().json.work_date }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "4a647cbe-9ba9-d55e-78d8-b0c9ec9d88c4",
+      "name": "Rows On Work Date",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        3740,
+        80
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            {
+              "aggregation": "sum",
+              "field": "Contributed Hours"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "66736eed-64f0-953d-c320-dc06f418c58b",
+      "name": "Sum Hours On Date",
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1.1,
+      "position": [
+        3960,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c08536a6-fc56-a500-97a5-4799ea25fcf5",
+              "name": "day_hours",
+              "value": "={{ Number($json.sum_Contributed_Hours) || 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "307ad113-5b94-099a-f6b5-cfbdc5bcbc18",
+      "name": "Day Total",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4180,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5d1835d9-dade-99a3-8551-bea77df1da0a",
+              "leftValue": "={{ String($json.Date ?? '').trim() }}",
+              "rightValue": "={{ $('Normalise Input').first().json.work_date }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "76a172d3-4738-8370-67cd-a8ee523ee5a1",
+              "leftValue": "={{ String($json['Activity Type'] ?? '').trim() }}",
+              "rightValue": "={{ $('Collect Matches').first().json.matches[0].activity_name }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "0675c44c-0329-71fa-f34f-47eabe2dc335",
+              "leftValue": "={{ String($json['Entry ID'] ?? '').trim() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a3b212c7-cb37-86cb-d15f-e9b2fa064461",
+      "name": "Existing Entry For Activity",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        3740,
+        300
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fe426345-1722-8be4-4341-b8415683a695",
+              "name": "dup_found",
+              "value": "={{ String($json['Entry ID'] ?? '').trim() !== '' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "c765ecae-31c0-4c4d-2784-a7b99d0c8359",
+              "name": "dup_hours",
+              "value": "={{ Number($json['Contributed Hours']) || 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5d9692bb-9436-0665-322a-1a060fc93e33",
+      "name": "Duplicate Check",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4180,
+        300
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2995f57b-3c36-5876-bc38-20543b76bbdd",
+              "leftValue": "={{ String($json['Activity Type'] ?? '').trim() }}",
+              "rightValue": "={{ $('Collect Matches').first().json.matches[0].activity_name }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "f4c65b6a-2bb2-49a2-a30e-e3be46cca232",
+              "leftValue": "={{ String($json['Entry ID'] ?? '').trim() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c120c151-8e30-7a02-1bf5-f16cf9eff15e",
+      "name": "Blank Rows For Activity",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        3740,
+        520
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "maxItems": 1
+      },
+      "id": "19743c95-7110-cf93-3fa6-52109e1c787a",
+      "name": "Take First Row",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        4070,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8275e1a3-1807-ded4-6c3b-107d8ef167bb",
+              "name": "target_found",
+              "value": "={{ Number($json.row_number) > 1 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "e9c7784c-e271-dc15-349e-71dbf4a4498f",
+              "name": "target_row_number",
+              "value": "={{ Number($json.row_number) || 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2240857b-c70d-bbf7-b809-dea1182dc32c",
+      "name": "Target Row",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4400,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "id": "6ce85daa-402e-ebaf-672f-42052e9beafb",
+      "name": "Combine Checks",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        4620,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "99fcb734-8e45-6941-dab2-49c0f109a8c6",
+              "leftValue": "={{ $json.day_hours + $('Normalise Input').first().json.hours }}",
+              "rightValue": 12,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "cec63dee-aa65-bece-3fdc-7786ddd88eee",
+      "name": "Within Daily Cap?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dee2beb8-6baa-3fdd-6b41-31dcc54bb386",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "3eee7f46-1fa8-0ac2-c1dd-e69fa2bb85b1",
+              "name": "reason",
+              "value": "daily_limit",
+              "type": "string"
+            },
+            {
+              "id": "a6fd5707-fea3-fb3a-f95f-c310de068e2e",
+              "name": "already_logged",
+              "value": "={{ $json.day_hours }}",
+              "type": "number"
+            },
+            {
+              "id": "db03dd01-b6df-a93c-1968-1170eae7196e",
+              "name": "work_date",
+              "value": "={{ $('Normalise Input').first().json.work_date }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c41185b8-93d4-097a-1989-088138c95530",
+      "name": "Daily Limit Reached",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5060,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "64de51d4-bb3d-93e2-ee6c-eba30990bb84",
+              "leftValue": "={{ $json.dup_found }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "75790780-a500-e537-ca6a-76b13f8123da",
+      "name": "Already Logged?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5060,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dee2beb8-6baa-3fdd-6b41-31dcc54bb386",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "de01aeb4-7dae-b6d0-eb3e-eb473e9fe47c",
+              "name": "reason",
+              "value": "duplicate_entry",
+              "type": "string"
+            },
+            {
+              "id": "6b55ef85-badd-3bc1-3d1b-f65a586b01a9",
+              "name": "existing_hours",
+              "value": "={{ $json.dup_hours }}",
+              "type": "number"
+            },
+            {
+              "id": "0923f7b5-f0fd-2bf1-34c7-c614dc4efca2",
+              "name": "activity_name",
+              "value": "={{ $('Collect Matches').first().json.matches[0].activity_name }}",
+              "type": "string"
+            },
+            {
+              "id": "6ea66069-5e9a-ce88-6cf0-6b327f891e8d",
+              "name": "work_date",
+              "value": "={{ $('Normalise Input').first().json.work_date }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "40044f49-40af-29d9-3b2d-fc8f0a2b620b",
+      "name": "Duplicate Entry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5280,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "17b7e12a-f386-9b47-6e02-3e723fc8a5c9",
+              "leftValue": "={{ $json.target_found }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "311637d0-8418-c3a8-1d2f-5d0d6ce5f317",
+      "name": "Blank Row Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "action": "generate",
+        "dataPropertyName": "entry_id",
+        "encodingType": "uuid"
+      },
+      "id": "50aa96b9-31ea-504f-474a-bb31b5ad48ee",
+      "name": "New Entry ID (Update)",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        5500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Normalise Input').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "TimeSheet"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.target_row_number }}",
+            "Entry ID": "={{ $json.entry_id }}",
+            "Employee Code": "={{ String($('Read Profile').first().json.emp_code).trim() }}",
+            "Employee Name": "={{ $('Read Profile').first().json.emp_name }}",
+            "Date": "={{ $('Normalise Input').first().json.work_date }}",
+            "Contributed Hours": "={{ $('Normalise Input').first().json.hours }}",
+            "Task Description": "={{ $('Normalise Input').first().json.task_description }}",
+            "Additional Comments": "={{ $('Normalise Input').first().json.comments }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Entry ID",
+              "displayName": "Entry ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Employee Code",
+              "displayName": "Employee Code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Employee Name",
+              "displayName": "Employee Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Contributed Hours",
+              "displayName": "Contributed Hours",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Task Description",
+              "displayName": "Task Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Additional Comments",
+              "displayName": "Additional Comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "c49d255f-5c55-2de7-512b-bff9ddade28f",
+      "name": "Complete Blank Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        5720,
+        200
+      ],
+      "credentials": {
+        "googleApi": "Minori Sheets"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d8b53459-9645-ed85-3e51-868837f70962",
+              "leftValue": "={{ Boolean($input.item.error) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "bac79d95-a0e7-9e0a-6175-f6240235bfb7",
+      "name": "Update Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5940,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5d246346-b36c-97e2-1061-d4387e2ae690",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "9cb75e7a-748d-1229-c87d-530805153049",
+              "name": "action",
+              "value": "updated",
+              "type": "string"
+            },
+            {
+              "id": "c6f34e9b-8853-d9e3-795f-69b95933dc0a",
+              "name": "entry_id",
+              "value": "={{ $('New Entry ID (Update)').first().json.entry_id }}",
+              "type": "string"
+            },
+            {
+              "id": "6c2fc223-7708-28e9-6f94-f7721b87ef17",
+              "name": "row_number",
+              "value": "={{ $('New Entry ID (Update)').first().json.target_row_number }}",
+              "type": "number"
+            },
+            {
+              "id": "eb69f8c2-6522-e47d-7557-0c87ec0d65e0",
+              "name": "emp_name",
+              "value": "={{ $('Read Profile').first().json.emp_name }}",
+              "type": "string"
+            },
+            {
+              "id": "982ba274-56dc-2058-8170-093f55dda039",
+              "name": "project_name",
+              "value": "={{ $('Read Profile').first().json.project_name }}",
+              "type": "string"
+            },
+            {
+              "id": "26aeded2-bc7c-9df1-7c9d-c7ea54edece8",
+              "name": "activity_name",
+              "value": "={{ $('Collect Matches').first().json.matches[0].activity_name }}",
+              "type": "string"
+            },
+            {
+              "id": "0075f399-969c-abf9-0f22-4173e9e5e8fe",
+              "name": "hours",
+              "value": "={{ $('Normalise Input').first().json.hours }}",
+              "type": "number"
+            },
+            {
+              "id": "a708245f-0284-dc81-42c1-a9b4a9956c3b",
+              "name": "work_date",
+              "value": "={{ $('Normalise Input').first().json.work_date }}",
+              "type": "string"
+            },
+            {
+              "id": "c024d5b7-4396-c5eb-00aa-85e4b58b229c",
+              "name": "day_total_hours",
+              "value": "={{ Math.round((Number($('Combine Checks').first().json.day_hours) + $('Normalise Input').first().json.hours) * 100) / 100 }}",
+              "type": "number"
+            },
+            {
+              "id": "7bb343bb-fef6-2038-3e8b-dea4b0f0887f",
+              "name": "standard_hours",
+              "value": 8,
+              "type": "number"
+            },
+            {
+              "id": "2262ec58-487f-d6c5-bc9d-55d64c5c6c19",
+              "name": "remaining_hours",
+              "value": "={{ Math.max(0, Math.round((8 - (Number($('Combine Checks').first().json.day_hours) + $('Normalise Input').first().json.hours)) * 100) / 100) }}",
+              "type": "number"
+            },
+            {
+              "id": "f0175272-8958-a8c5-dbcb-cc0b402ca88e",
+              "name": "overtime_hours",
+              "value": "={{ Math.max(0, Math.round(((Number($('Combine Checks').first().json.day_hours) + $('Normalise Input').first().json.hours) - 8) * 100) / 100) }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "22a6367d-c1b3-131b-7ace-6ce8c9a41ad1",
+      "name": "Row Updated",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6160,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "action": "generate",
+        "dataPropertyName": "entry_id",
+        "encodingType": "uuid"
+      },
+      "id": "7e3d5c7d-145c-ac09-92e7-98dac06510bc",
+      "name": "New Entry ID (Append)",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        5500,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Normalise Input').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "TimeSheet"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Entry ID": "={{ $json.entry_id }}",
+            "Employee Code": "={{ String($('Read Profile').first().json.emp_code).trim() }}",
+            "Employee Name": "={{ $('Read Profile').first().json.emp_name }}",
+            "Date": "={{ $('Normalise Input').first().json.work_date }}",
+            "Project Name": "={{ $('Read Profile').first().json.project_name }}",
+            "Activity Type": "={{ $('Collect Matches').first().json.matches[0].activity_name }}",
+            "Contributed Hours": "={{ $('Normalise Input').first().json.hours }}",
+            "Task Description": "={{ $('Normalise Input').first().json.task_description }}",
+            "Additional Comments": "={{ $('Normalise Input').first().json.comments }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Entry ID",
+              "displayName": "Entry ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Employee Code",
+              "displayName": "Employee Code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Employee Name",
+              "displayName": "Employee Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Project Name",
+              "displayName": "Project Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Activity Type",
+              "displayName": "Activity Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Contributed Hours",
+              "displayName": "Contributed Hours",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Task Description",
+              "displayName": "Task Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Additional Comments",
+              "displayName": "Additional Comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "c17acdab-0e59-5dd9-5a2c-356c4f50737d",
+      "name": "Append New Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        5720,
+        420
+      ],
+      "credentials": {
+        "googleApi": "Minori Sheets"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "37f0cb16-e238-7768-eec9-d9b0e4710052",
+              "leftValue": "={{ Boolean($input.item.error) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e88259b2-620b-eeeb-79b3-83188e59239e",
+      "name": "Append Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5940,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5d246346-b36c-97e2-1061-d4387e2ae690",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "c0aacab0-e5fd-b39b-6dce-8f9ce84891b4",
+              "name": "action",
+              "value": "appended",
+              "type": "string"
+            },
+            {
+              "id": "08e19655-e1e7-75c1-afc5-277b4fcb8052",
+              "name": "entry_id",
+              "value": "={{ $('New Entry ID (Append)').first().json.entry_id }}",
+              "type": "string"
+            },
+            {
+              "id": "2ebc92d0-96e5-8848-887e-c64845a6d480",
+              "name": "row_number",
+              "value": "={{ Math.max(1, ...$('Read TimeSheet').all().map(i => Number(i.json.row_number) || 1)) + 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "eb69f8c2-6522-e47d-7557-0c87ec0d65e0",
+              "name": "emp_name",
+              "value": "={{ $('Read Profile').first().json.emp_name }}",
+              "type": "string"
+            },
+            {
+              "id": "982ba274-56dc-2058-8170-093f55dda039",
+              "name": "project_name",
+              "value": "={{ $('Read Profile').first().json.project_name }}",
+              "type": "string"
+            },
+            {
+              "id": "26aeded2-bc7c-9df1-7c9d-c7ea54edece8",
+              "name": "activity_name",
+              "value": "={{ $('Collect Matches').first().json.matches[0].activity_name }}",
+              "type": "string"
+            },
+            {
+              "id": "0075f399-969c-abf9-0f22-4173e9e5e8fe",
+              "name": "hours",
+              "value": "={{ $('Normalise Input').first().json.hours }}",
+              "type": "number"
+            },
+            {
+              "id": "a708245f-0284-dc81-42c1-a9b4a9956c3b",
+              "name": "work_date",
+              "value": "={{ $('Normalise Input').first().json.work_date }}",
+              "type": "string"
+            },
+            {
+              "id": "c024d5b7-4396-c5eb-00aa-85e4b58b229c",
+              "name": "day_total_hours",
+              "value": "={{ Math.round((Number($('Combine Checks').first().json.day_hours) + $('Normalise Input').first().json.hours) * 100) / 100 }}",
+              "type": "number"
+            },
+            {
+              "id": "7bb343bb-fef6-2038-3e8b-dea4b0f0887f",
+              "name": "standard_hours",
+              "value": 8,
+              "type": "number"
+            },
+            {
+              "id": "2262ec58-487f-d6c5-bc9d-55d64c5c6c19",
+              "name": "remaining_hours",
+              "value": "={{ Math.max(0, Math.round((8 - (Number($('Combine Checks').first().json.day_hours) + $('Normalise Input').first().json.hours)) * 100) / 100) }}",
+              "type": "number"
+            },
+            {
+              "id": "f0175272-8958-a8c5-dbcb-cc0b402ca88e",
+              "name": "overtime_hours",
+              "value": "={{ Math.max(0, Math.round(((Number($('Combine Checks').first().json.day_hours) + $('Normalise Input').first().json.hours) - 8) * 100) / 100) }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "43f07db4-d777-cf5f-9543-a444de43e1ac",
+      "name": "Row Appended",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6160,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dee2beb8-6baa-3fdd-6b41-31dcc54bb386",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "7ebace1a-c2e1-c5dc-32ee-f99a548a35ac",
+              "name": "reason",
+              "value": "={{ /403|404|permission|forbidden|not found|could not be found/i.test([$input.item.error?.message, $input.item.error?.description, $input.item.error?.httpCode].join(' ')) ? 'sheet_access_denied' : 'sheet_unavailable' }}",
+              "type": "string"
+            },
+            {
+              "id": "d6281c8a-7589-6ad8-e08c-1696278aeed0",
+              "name": "detail",
+              "value": "={{ [$input.item.error?.message, $input.item.error?.description, $input.item.error?.httpCode].join(' ').trim().slice(0, 200) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4677eefc-e74a-3769-00d3-5787850a1d63",
+      "name": "Sheet Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3520,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "eac77920-8158-384c-fb55-39252c9db076",
+              "leftValue": "={{ $runIndex }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "id": "210ff8cb-d3c1-071f-672f-0d4d117dd3a8",
+              "leftValue": "={{ /403|404|permission|forbidden|not found|could not be found/i.test([$input.item.error?.message, $input.item.error?.description, $input.item.error?.httpCode].join(' ')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e7072fcc-13ee-7e79-eb3b-8248dae57639",
+      "name": "Retry Read Profile?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1140,
+        470
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "71847983-3623-b81c-2afb-fb2b78e49a0f",
+      "name": "Wait Before Retrying Read Profile",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        980,
+        470
+      ],
+      "webhookId": "6b566f7e-bd5e-b3eb-1a08-92a4f06e9814"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ff2c3311-4080-b97e-26c6-9c0f0c28346d",
+              "leftValue": "={{ $runIndex }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "id": "cc9953ed-637d-ceae-0a96-2e0625f790d6",
+              "leftValue": "={{ /403|404|permission|forbidden|not found|could not be found/i.test([$input.item.error?.message, $input.item.error?.description, $input.item.error?.httpCode].join(' ')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "0348d61c-fbe0-02e7-96df-4b6afb30a672",
+      "name": "Retry Read Activities?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1800,
+        470
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "f646a451-7fb2-8044-1e8a-9f11b01e64d3",
+      "name": "Wait Before Retrying Read Activities",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        470
+      ],
+      "webhookId": "18ec6776-f2dd-c3ca-a96b-946570921933"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d4735647-d5ef-e4dc-2e98-e880efb60a47",
+              "leftValue": "={{ $runIndex }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "id": "315263c3-fe69-3b26-e6ad-af374709dc15",
+              "leftValue": "={{ /403|404|permission|forbidden|not found|could not be found/i.test([$input.item.error?.message, $input.item.error?.description, $input.item.error?.httpCode].join(' ')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "882b904b-5cf4-0064-05a7-3adc0337375c",
+      "name": "Retry Read TimeSheet?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3560,
+        470
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "64f1d995-8b78-2eb8-07dc-80352a61cac7",
+      "name": "Wait Before Retrying Read TimeSheet",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3400,
+        470
+      ],
+      "webhookId": "6c38e6df-1494-b43b-0b6c-b42760bd849b"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "efa199da-a47e-4ed8-4c55-d695f9c5f3d6",
+              "leftValue": "={{ $runIndex }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "id": "60559ae4-83aa-70d8-bca5-366fe1435ed3",
+              "leftValue": "={{ /403|404|permission|forbidden|not found|could not be found/i.test([$input.item.error?.message, $input.item.error?.description, $input.item.error?.httpCode].join(' ')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "1f1c37c7-7179-bc6f-4ea2-a8827596a2fe",
+      "name": "Retry Complete Blank Row?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5980,
+        370
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "c2567b98-45d9-8b25-da76-6808a20237de",
+      "name": "Wait Before Retrying Complete Blank Row",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5820,
+        370
+      ],
+      "webhookId": "635dff16-fc1f-1011-11b3-840c39367b32"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b3d1225c-e41c-79f7-123c-fef8e0d3a122",
+              "leftValue": "={{ $runIndex }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "id": "30208498-cab2-226c-c193-3ba45e414942",
+              "leftValue": "={{ /403|404|permission|forbidden|not found|could not be found/i.test([$input.item.error?.message, $input.item.error?.description, $input.item.error?.httpCode].join(' ')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "451ac3ee-bb0e-61c5-a66b-8313a5526583",
+      "name": "Retry Append New Row?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5980,
+        590
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "6d484a68-a07b-ec11-f19e-871294efd925",
+      "name": "Wait Before Retrying Append New Row",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5820,
+        590
+      ],
+      "webhookId": "dff726eb-7796-3f32-d1f4-2ff538fff54e"
+    }
+  ],
+  "connections": {
+    "Receive Log Request": {
+      "main": [
+        [
+          {
+            "node": "Resolve Work Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Work Date": {
+      "main": [
+        [
+          {
+            "node": "Normalise Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Input": {
+      "main": [
+        [
+          {
+            "node": "Credentials Supplied?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Credentials Supplied?": {
+      "main": [
+        [
+          {
+            "node": "Read Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Credentials Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Profile": {
+      "main": [
+        [
+          {
+            "node": "Profile Read Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Profile Read Failed?": {
+      "main": [
+        [
+          {
+            "node": "Retry Read Profile?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Verify Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Employee": {
+      "main": [
+        [
+          {
+            "node": "Verify Only?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Only?": {
+      "main": [
+        [
+          {
+            "node": "Employee Verified",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Activities": {
+      "main": [
+        [
+          {
+            "node": "Activities Read Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Activities Read Failed?": {
+      "main": [
+        [
+          {
+            "node": "Retry Read Activities?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Active On Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Active On Project": {
+      "main": [
+        [
+          {
+            "node": "Match Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Activity": {
+      "main": [
+        [
+          {
+            "node": "Collect Matches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Matches": {
+      "main": [
+        [
+          {
+            "node": "Exactly One Activity?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exactly One Activity?": {
+      "main": [
+        [
+          {
+            "node": "Hours Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hours Valid?": {
+      "main": [
+        [
+          {
+            "node": "Date Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Hours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Date Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read TimeSheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read TimeSheet": {
+      "main": [
+        [
+          {
+            "node": "TimeSheet Read Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TimeSheet Read Failed?": {
+      "main": [
+        [
+          {
+            "node": "Retry Read TimeSheet?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rows On Work Date",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Existing Entry For Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Blank Rows For Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rows On Work Date": {
+      "main": [
+        [
+          {
+            "node": "Sum Hours On Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sum Hours On Date": {
+      "main": [
+        [
+          {
+            "node": "Day Total",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existing Entry For Activity": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blank Rows For Activity": {
+      "main": [
+        [
+          {
+            "node": "Take First Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Take First Row": {
+      "main": [
+        [
+          {
+            "node": "Target Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Day Total": {
+      "main": [
+        [
+          {
+            "node": "Combine Checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Check": {
+      "main": [
+        [
+          {
+            "node": "Combine Checks",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Target Row": {
+      "main": [
+        [
+          {
+            "node": "Combine Checks",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Combine Checks": {
+      "main": [
+        [
+          {
+            "node": "Within Daily Cap?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Within Daily Cap?": {
+      "main": [
+        [
+          {
+            "node": "Already Logged?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Daily Limit Reached",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Logged?": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Entry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Blank Row Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blank Row Found?": {
+      "main": [
+        [
+          {
+            "node": "New Entry ID (Update)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "New Entry ID (Append)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Entry ID (Update)": {
+      "main": [
+        [
+          {
+            "node": "Complete Blank Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Blank Row": {
+      "main": [
+        [
+          {
+            "node": "Update Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Failed?": {
+      "main": [
+        [
+          {
+            "node": "Retry Complete Blank Row?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Row Updated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Entry ID (Append)": {
+      "main": [
+        [
+          {
+            "node": "Append New Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append New Row": {
+      "main": [
+        [
+          {
+            "node": "Append Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Failed?": {
+      "main": [
+        [
+          {
+            "node": "Retry Append New Row?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Row Appended",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Read Profile?": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retrying Read Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sheet Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retrying Read Profile": {
+      "main": [
+        [
+          {
+            "node": "Read Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Read Activities?": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retrying Read Activities",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sheet Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retrying Read Activities": {
+      "main": [
+        [
+          {
+            "node": "Read Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Read TimeSheet?": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retrying Read TimeSheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sheet Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retrying Read TimeSheet": {
+      "main": [
+        [
+          {
+            "node": "Read TimeSheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Complete Blank Row?": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retrying Complete Blank Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sheet Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retrying Complete Blank Row": {
+      "main": [
+        [
+          {
+            "node": "Complete Blank Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Append New Row?": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retrying Append New Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sheet Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retrying Append New Row": {
+      "main": [
+        [
+          {
+            "node": "Append New Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false
+  },
+  "pinData": {},
+  "tags": []
+}
